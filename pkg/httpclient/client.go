@@ -31,7 +31,13 @@ type NonRetryableHTTPError struct {
 
 func (e *NonRetryableHTTPError) Error() string {
 	if len(e.Body) > 0 {
-		return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディ: %s", e.StatusCode, strings.TrimSpace(string(e.Body)))
+		// ボディを一定の長さに制限して表示する例
+		const maxBodyDisplaySize = 1024 // 例: 1KBまで表示
+		displayBody := string(e.Body)
+		if len(displayBody) > maxBodyDisplaySize {
+			displayBody = displayBody[:maxBodyDisplaySize] + "..." // 長すぎる場合は切り詰める
+		}
+		return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディ: %s", e.StatusCode, strings.TrimSpace(displayBody))
 	}
 	return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディなし", e.StatusCode)
 }
