@@ -18,7 +18,8 @@ import (
 const (
 	// HTTPクライアント関連の定数
 	DefaultHTTPTimeout = 30 * time.Second
-	MaxBodySize        = int64(10 * 1024 * 1024) // 10MB: POSTレスポンスボディの最大読み込みサイズ
+	// MaxResponseBodySize は、あらゆるHTTPレスポンスボディの最大読み込みサイズ
+	MaxResponseBodySize = int64(10 * 1024 * 1024) // 10MB
 	// サイトからのブロックを避けるためのUser-Agent
 	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
 )
@@ -31,13 +32,14 @@ type NonRetryableHTTPError struct {
 
 func (e *NonRetryableHTTPError) Error() string {
 	if len(e.Body) > 0 {
-		// ボディを一定の長さに制限して表示する例
-		const maxBodyDisplaySize = 1024 // 例: 1KBまで表示
-		displayBody := string(e.Body)
+		const maxBodyDisplaySize = 1024                  // 例: 1KBまで表示
+		displayBody := strings.TrimSpace(string(e.Body)) // まずTrimSpaceを適用
 		if len(displayBody) > maxBodyDisplaySize {
-			displayBody = displayBody[:maxBodyDisplaySize] + "..." // 長すぎる場合は切り詰める
+			// UTF-8セーフな切り詰めを検討するなら、runeカウントを使う
+			// 例えば、[]rune(displayBody)[:maxRunes] を使うなど
+			displayBody = displayBody[:maxBodyDisplaySize] + "..."
 		}
-		return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディ: %s", e.StatusCode, strings.TrimSpace(displayBody))
+		return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディ: %s", e.StatusCode, displayBody)
 	}
 	return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディなし", e.StatusCode)
 }
@@ -53,21 +55,37 @@ type Client struct {
 	retryConfig retry.Config
 }
 
-// New は、新しいClientを生成します。
-func New(timeout time.Duration) *Client {
+// ClientOption はClientの設定を行うための関数型です。
+type ClientOption func(*Client)
+
+// WithHTTPClient はカスタムのHTTPClientを設定します。
+func WithHTTPClient(client HTTPClient) ClientOption {
+	return func(c *Client) {
+		c.httpClient = client
+	}
+}
+
+// New は新しいClientを初期化します。
+// optionsはオプションの設定を受け取ります。
+func New(timeout time.Duration, options ...ClientOption) *Client {
 	if timeout <= 0 {
 		timeout = DefaultHTTPTimeout
 	}
 
 	retryCfg := retry.DefaultConfig()
 
-	return &Client{
-		// 修正: New 関数内で標準の *http.Client を初期化
-		httpClient: &http.Client{
+	client := &Client{
+		httpClient: &http.Client{ // デフォルトのHTTPクライアント
 			Timeout: timeout,
 		},
 		retryConfig: retryCfg,
 	}
+
+	for _, opt := range options {
+		opt(client)
+	}
+
+	return client
 }
 
 // WithMaxRetries は最大リトライ回数を設定します。
@@ -170,7 +188,7 @@ func (c *Client) doPostJSON(url string, requestBody []byte, ctx context.Context)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP POSTリクエストに失敗しました (ネットワーク/接続エラー): %w", err)
+		return nil, fmt.Errorf("URL %s へのHTTP POSTリクエストに失敗しました (ネットワーク/接続エラー): %w", url, err)
 	}
 
 	return handleResponse(resp)
@@ -181,11 +199,11 @@ func (c *Client) doPostJSON(url string, requestBody []byte, ctx context.Context)
 func handleResponse(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
 
-	if resp.ContentLength > 0 && resp.ContentLength > MaxBodySize {
-		return nil, fmt.Errorf("レスポンスボディが最大サイズ (%dバイト) を超えました", MaxBodySize)
+	if resp.ContentLength > 0 && resp.ContentLength > MaxResponseBodySize {
+		return nil, fmt.Errorf("レスポンスボディが最大サイズ (%dバイト) を超えました", MaxResponseBodySize)
 	}
 
-	limitedReader := io.LimitReader(resp.Body, MaxBodySize)
+	limitedReader := io.LimitReader(resp.Body, MaxResponseBodySize)
 	bodyBytes, err := io.ReadAll(limitedReader)
 	if err != nil {
 		return nil, fmt.Errorf("レスポンスボディの読み込みに失敗しました: %w", err)
