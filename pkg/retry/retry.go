@@ -40,54 +40,45 @@ func DefaultConfig() Config {
 	}
 }
 
-// Do は指数バックオフとカスタムエラー判定を使用して操作をリトライします。
-// Configを引数で受け取ることで、特定のクライアント構造体（Client）への依存を排除しています。
-func Do(ctx context.Context, cfg Config, operationName string, op Operation, shouldRetryFn ShouldRetryFunc) error {
-
-	// backoff の設定
+// newBackOffPolicy は設定とコンテキストから backoff.BackOff を生成します。
+func newBackOffPolicy(ctx context.Context, cfg Config) backoff.BackOff {
 	b := backoff.NewExponentialBackOff()
 	b.InitialInterval = cfg.InitialInterval
 	b.MaxInterval = cfg.MaxInterval
 
-	// 最大リトライ回数とコンテキストを backoff に適用
 	bo := backoff.WithMaxRetries(b, cfg.MaxRetries)
-	bo = backoff.WithContext(bo, ctx)
+	return backoff.WithContext(bo, ctx)
+}
 
-	var lastErr error
+// Do は指数バックオフとカスタムエラー判定を使用して操作をリトライします。
+// Configを引数で受け取ることで、特定のクライアント構造体（Client）への依存を排除しています。
+func Do(ctx context.Context, cfg Config, operationName string, op Operation, shouldRetryFn ShouldRetryFunc) error {
+	bo := newBackOffPolicy(ctx, cfg)
 
-	// リトライ処理内で実行される実際の操作
 	retryableOp := func() error {
 		err := op()
-
 		if err == nil {
 			return nil // 成功
 		}
-
-		// 外部から渡された判定関数を使用
 		if shouldRetryFn(err) {
-			lastErr = fmt.Errorf("一時的なエラーが発生、リトライします: %w", err)
-			return lastErr // リトライ対象
+			return err // リトライ対象
 		}
-
-		lastErr = fmt.Errorf("致命的なエラーのためリトライを中止: %w", err)
-		return backoff.Permanent(lastErr) // 永続エラーとしてラップし、即時終了
+		// 永続エラーとしてラップし、即時終了
+		return backoff.Permanent(err)
 	}
 
 	err := backoff.Retry(retryableOp, bo)
-
 	if err != nil {
-		// コンテキストキャンセル/タイムアウトのエラー処理
+		// 永続的エラーかどうかを最初に判定する
+		if pErr, ok := err.(*backoff.PermanentError); ok {
+			return fmt.Errorf("%sに失敗しました: 致命的なエラーのためリトライを中止: %w", operationName, pErr.Err)
+		}
+		// コンテキストのキャンセルまたはタイムアウト
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return fmt.Errorf("%sに失敗しました: コンテキストタイムアウト/キャンセル: %w", operationName, err)
 		}
-
-		// backoff.Permanent でラップされたエラーから元のエラーを取得
-		if pErr, ok := err.(*backoff.PermanentError); ok {
-			return pErr.Err // 最後の致命的なエラーを返す
-		}
-
-		// その他のリトライ上限到達エラー
-		return fmt.Errorf("%sに失敗しました: 最大リトライ回数 (%d回) に到達。最終エラー: %w", operationName, cfg.MaxRetries, lastErr)
+		// その他のエラーはリトライ上限到達とみなす
+		return fmt.Errorf("%sに失敗しました: 最大リトライ回数 (%d回) に到達。最終エラー: %w", operationName, cfg.MaxRetries, err)
 	}
 	return nil
 }
