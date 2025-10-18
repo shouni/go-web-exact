@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-
 	"github.com/shouni/go-web-exact/pkg/retry"
 )
 
@@ -20,7 +19,6 @@ const (
 	// HTTPクライアント関連の定数
 	DefaultHTTPTimeout = 30 * time.Second
 	MaxBodySize        = int64(10 * 1024 * 1024) // 10MB: POSTレスポンスボディの最大読み込みサイズ
-
 	// サイトからのブロックを避けるためのUser-Agent
 	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
 )
@@ -38,10 +36,14 @@ func (e *NonRetryableHTTPError) Error() string {
 	return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディなし", e.StatusCode)
 }
 
+// HTTPClient は、*http.Clientと互換性のあるHTTPクライアントのインターフェースを定義します。
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // Client はHTTPリクエストと指数バックオフを用いたリトライロジックを管理します。
 type Client struct {
-	httpClient *http.Client
-	// ★ 修正: retryMax を削除し、retry.Config を保持
+	httpClient  HTTPClient
 	retryConfig retry.Config
 }
 
@@ -51,10 +53,10 @@ func New(timeout time.Duration) *Client {
 		timeout = DefaultHTTPTimeout
 	}
 
-	// ★ 修正: デフォルトのリトライ設定を適用
 	retryCfg := retry.DefaultConfig()
 
 	return &Client{
+		// 修正: New 関数内で標準の *http.Client を初期化
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
@@ -64,7 +66,6 @@ func New(timeout time.Duration) *Client {
 
 // WithMaxRetries は最大リトライ回数を設定します。
 func (c *Client) WithMaxRetries(max uint64) *Client {
-	// ★ 修正: Config に値を設定
 	c.retryConfig.MaxRetries = max
 	return c
 }
@@ -74,26 +75,31 @@ func (c *Client) addCommonHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", UserAgent)
 }
 
+// doWithRetry は共通のリトライロジックを実行します。
+func (c *Client) doWithRetry(ctx context.Context, operationName string, op func() error) error {
+	return retry.Do(
+		ctx,
+		c.retryConfig,
+		operationName,
+		op,
+		c.isHTTPRetryableError,
+	)
+}
+
 // FetchDocument はURLからHTMLを取得し、goquery.Documentを返します。
 func (c *Client) FetchDocument(url string, ctx context.Context) (*goquery.Document, error) {
 	var doc *goquery.Document
-
-	// ★ 修正: op 関数内で backoff.Permanent の処理を削除し、純粋にエラーを返す
 	op := func() error {
 		var fetchErr error
 		doc, fetchErr = c.doFetch(url, ctx)
 		return fetchErr // エラーが発生した場合はそのまま返す
 	}
 
-	// ★ 修正: c.commonRetryer の代わりに retry.Do() を呼び出す
-	err := retry.Do(
+	err := c.doWithRetry(
 		ctx,
-		c.retryConfig,
 		fmt.Sprintf("URL(%s)のフェッチ", url),
 		op,
-		c.isHTTPRetryableError, // 新しく定義するHTTP固有の判定関数
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -107,23 +113,20 @@ func (c *Client) doFetch(url string, ctx context.Context) (*goquery.Document, er
 		return nil, fmt.Errorf("GETリクエスト作成に失敗しました: %w", err)
 	}
 	c.addCommonHeaders(req)
-
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTPリクエストに失敗しました (ネットワーク/接続エラー): %w", err)
 	}
 
-	defer resp.Body.Close()
-
-	if err := checkResponseForRetry(resp); err != nil {
+	bodyBytes, err := handleResponse(resp)
+	if err != nil {
 		return nil, err
 	}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("HTML解析に失敗しました: %w", err)
 	}
-
 	return doc, nil
 }
 
@@ -133,28 +136,21 @@ func (c *Client) PostJSONAndFetchBytes(url string, data any, ctx context.Context
 	if err != nil {
 		return nil, fmt.Errorf("JSONデータのシリアライズに失敗しました: %w", err)
 	}
-
 	var bodyBytes []byte
-
-	// ★ 修正: op 関数内で backoff.Permanent の処理を削除し、純粋にエラーを返す
 	op := func() error {
 		var postErr error
 		bodyBytes, postErr = c.doPostJSON(url, requestBody, ctx)
 		return postErr // エラーが発生した場合はそのまま返す
 	}
 
-	// ★ 修正: c.commonRetryer の代わりに retry.Do() を呼び出す
-	err = retry.Do(
+	err = c.doWithRetry(
 		ctx,
-		c.retryConfig,
 		fmt.Sprintf("URL(%s)へのPOSTリクエスト", url),
 		op,
-		c.isHTTPRetryableError, // HTTP固有の判定関数
 	)
 	if err != nil {
 		return nil, err
 	}
-
 	return bodyBytes, nil
 }
 
@@ -166,16 +162,21 @@ func (c *Client) doPostJSON(url string, requestBody []byte, ctx context.Context)
 	}
 	c.addCommonHeaders(req)
 	req.Header.Set("Content-Type", "application/json")
-
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP POSTリクエストに失敗しました (ネットワーク/接続エラー): %w", err)
 	}
 
+	return handleResponse(resp)
+}
+
+// handleResponseはHTTPレスポンスを処理し、成功した場合はボディをバイト配列として返します。
+// エラーが発生した場合は、ステータスコードに応じてリトライ可能かどうかが判断できるエラーを返します。
+func handleResponse(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
 
-	if err := checkResponseForRetry(resp); err != nil {
-		return nil, err
+	if resp.ContentLength > 0 && resp.ContentLength > MaxBodySize {
+		return nil, fmt.Errorf("レスポンスボディが最大サイズ (%dバイト) を超えました", MaxBodySize)
 	}
 
 	limitedReader := io.LimitReader(resp.Body, MaxBodySize)
@@ -184,44 +185,18 @@ func (c *Client) doPostJSON(url string, requestBody []byte, ctx context.Context)
 		return nil, fmt.Errorf("レスポンスボディの読み込みに失敗しました: %w", err)
 	}
 
-	if resp.ContentLength > 0 && resp.ContentLength > MaxBodySize {
-		return nil, fmt.Errorf("レスポンスボディが最大サイズ (%dバイト) を超えました", MaxBodySize)
-	}
-
-	return bodyBytes, nil
-}
-
-// checkResponseForRetry はHTTPレスポンスのステータスコードを評価し、リトライすべきエラーか、非リトライ対象のエラーかを返します。
-func checkResponseForRetry(resp *http.Response) error {
-	if resp.StatusCode == http.StatusOK {
-		return nil
-	}
-
-	// 注意: この関数はレスポンスボディを読み込みますが、閉じる責務は持ちません。
-	// 呼び出し元が resp.Body.Close() を実行する必要があります。
-	limitedReader := io.LimitReader(resp.Body, MaxBodySize)
-	bodyBytes, readErr := io.ReadAll(limitedReader)
-
-	if resp.ContentLength > 0 && resp.ContentLength > MaxBodySize {
-		return fmt.Errorf("レスポンスボディが最大サイズ (%dバイト) を超えました", MaxBodySize)
+	// 2xx系は成功
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return bodyBytes, nil
 	}
 
 	// 5xx 系: リトライ対象のサーバーエラー
 	if resp.StatusCode >= 500 && resp.StatusCode <= 599 {
-		if readErr != nil {
-			return fmt.Errorf("HTTPステータスコードエラー (5xx リトライ対象, ボディ読み込み失敗): %d, 原因: %w", resp.StatusCode, readErr)
-		}
-		// 5xxエラーをリトライ対象のエラーとしてそのまま返す
-		return fmt.Errorf("HTTPステータスコードエラー (5xx リトライ対象): %d, 詳細: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+		return nil, fmt.Errorf("HTTPステータスコードエラー (5xx リトライ対象): %d, 詳細: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
 	}
 
-	// 4xx 系: 非リトライ対象のクライアントエラー (NonRetryableHTTPError としてラップ)
-	if readErr != nil {
-		return &NonRetryableHTTPError{
-			StatusCode: resp.StatusCode,
-		}
-	}
-	return &NonRetryableHTTPError{
+	// 4xx 系など、その他は非リトライ対象のクライアントエラー
+	return nil, &NonRetryableHTTPError{
 		StatusCode: resp.StatusCode,
 		Body:       bodyBytes,
 	}
@@ -232,7 +207,6 @@ func IsNonRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
-
 	var nonRetryable *NonRetryableHTTPError
 	return errors.As(err, &nonRetryable)
 }
@@ -243,18 +217,14 @@ func (c *Client) isHTTPRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
-
 	// 1. Contextエラー（タイムアウト/キャンセル）はリトライ対象
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
-
 	// 2. 非リトライ対象エラー（4xx）はリトライしない
 	if IsNonRetryableError(err) {
 		return false
 	}
-
 	// 3. 5xxエラーやネットワークエラー（NonRetryableHTTPErrorでないもの）はすべてリトライ対象
-	// checkResponseForRetryが5xxの場合に返すエラーはこのカテゴリに入る
 	return true
 }
