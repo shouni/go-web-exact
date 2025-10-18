@@ -32,12 +32,14 @@ type NonRetryableHTTPError struct {
 
 func (e *NonRetryableHTTPError) Error() string {
 	if len(e.Body) > 0 {
-		const maxBodyDisplaySize = 1024                  // 例: 1KBまで表示
-		displayBody := strings.TrimSpace(string(e.Body)) // まずTrimSpaceを適用
+		const maxBodyDisplaySize = 1024 // 例: 1KBまで表示
+		displayBody := strings.TrimSpace(string(e.Body))
 		if len(displayBody) > maxBodyDisplaySize {
-			// UTF-8セーフな切り詰めを検討するなら、runeカウントを使う
-			// 例えば、[]rune(displayBody)[:maxRunes] を使うなど
-			displayBody = displayBody[:maxBodyDisplaySize] + "..."
+			// UTF-8セーフな切り詰め
+			runes := []rune(displayBody)
+			if len(runes) > maxBodyDisplaySize {
+				displayBody = string(runes[:maxBodyDisplaySize]) + "..."
+			}
 		}
 		return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディ: %s", e.StatusCode, displayBody)
 	}
@@ -139,7 +141,7 @@ func (c *Client) doFetch(url string, ctx context.Context) (*goquery.Document, er
 	c.addCommonHeaders(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("HTTPリクエストに失敗しました (ネットワーク/接続エラー): %w", err)
+		return nil, fmt.Errorf("URL %s へのHTTPリクエストに失敗しました (ネットワーク/接続エラー): %w", url, err)
 	}
 
 	bodyBytes, err := handleResponse(resp)
