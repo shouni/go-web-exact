@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/shouni/go-web-exact/blob/develop/LICENSE)
 [![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/shouni/go-web-exact)](https://github.com/shouni/go-web-exact/tags)
 
+## 🎯 概要
 
 `go-web-exact` は、Go言語で実装された、ウェブページからノイズを除去し、記事の本文や主要なコンテンツを正確に抽出するためのCLIツール、およびコアパッケージ群です。特に、LLM（大規模言語モデル）に入力するためのクリーンで構造化されたテキストデータを生成することを目的としています。
 
