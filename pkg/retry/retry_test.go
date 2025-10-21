@@ -38,8 +38,8 @@ func TestDo(t *testing.T) {
 	opName := "test_operation"
 
 	// 予期されるエラーメッセージを実装に合わせて正確に生成
-	permanentErrText := fmt.Sprintf("%sに失敗しました: 最大リトライ回数 (3回) に到達。最終エラー: %s", opName, "permanent error")
-	maxRetriesErrText := fmt.Sprintf("%sに失敗しました: 最大リトライ回数 (3回) に到達。最終エラー: retryable error", opName)
+	permanentErrText := fmt.Sprintf("%sに失敗しました: 最大リトライ回数 (%d回) に到達。最終エラー: %s", opName, testCfg.MaxRetries, "permanent error")
+	maxRetriesErrText := fmt.Sprintf("%sに失敗しました: 最大リトライ回数 (%d回) に到達。最終エラー: retryable error", opName, testCfg.MaxRetries)
 
 	tests := []struct {
 		name          string
