@@ -57,7 +57,7 @@ func (e *NonRetryableHTTPError) Error() string {
 	return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディなし", e.StatusCode)
 }
 
-// Do は HTTPClient インターフェースが持つ Do メソッドを呼び出すラッパーです。
+// Do は HTTPClient インターフェースが持つ Do メソッドを呼び出すラッパーです。これにより、Client 型が HTTPClient インターフェースを満たし、より柔軟な利用が可能になります。
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
