@@ -261,3 +261,17 @@ func (c *Client) isHTTPRetryableError(err error) bool {
 	// 3. 5xxエラーやネットワークエラー（NonRetryableHTTPErrorでないもの）はすべてリトライ対象
 	return true
 }
+
+// HandleLimitedResponse は、指定されたレスポンスボディを、最大サイズに制限して読み込みます。
+// Notifier パッケージから httpclient.HandleLimitedResponse(resp, limit) として呼び出されます。
+func HandleLimitedResponse(resp *http.Response, limit int64) ([]byte, error) {
+	defer resp.Body.Close()
+	limitedReader := io.LimitReader(resp.Body, limit)
+	bodyBytes, err := io.ReadAll(limitedReader)
+	if err != nil {
+		// ボディ読み込み自体が失敗した場合
+		return nil, fmt.Errorf("レスポンスボディの読み込みに失敗しました: %w", err)
+	}
+	// 成功またはボディ読み込みが部分的に成功したバイト列を返す
+	return bodyBytes, nil
+}
