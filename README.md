@@ -17,19 +17,21 @@ Go Web Exact は、Go言語で実装された、ウェブページから**ノイ
 
 * **高精度なコンテンツ抽出:** 独自のセレクタとヒューリスティックを用いて、ナビゲーション、広告、コメントなどのノイズを排除し、メインの記事本文を特定します。
 
+* **メモリ安全なリクエスト制限:** レスポンスボディの最大読み込みサイズを**25MB**に制限することで、予期せぬ巨大ファイルによる**メモリ枯渇（OOM）**を防ぎます。
+
 * **汎用的なリトライメカニズム (Exponential Backoff):**
   ネットワークの堅牢性を高めるため、リトライロジックを`pkg/retry`パッケージとして分離しました。HTTPクライアントやその他のAPIクライアントは、この汎用サービスを利用して、`backoff/v4` を用いた**自動リトライ機能**を実現します。
 
   ### 🔃 デフォルトのリトライ設定（`pkg/retry` の定数に基づく）
 
-| 設定項目 | 値 | 概要                                            |
+| 設定項目 | 値 | 概要 |
 | :--- | :--- |:---|
-| **初期間隔** (`InitialBackoffInterval`) | **5秒** | 最初の失敗から次の試行までの待機時間。指数バックオフの開始点です。            |
-| **最大間隔** (`MaxBackoffInterval`) | **30秒** | 指数バックオフにより待機時間が最大となる秒数。サーバーへの過負荷を防ぎます。        |
-| **デフォルト最大試行回数** (`DefaultMaxRetries`) | **3回** | デフォルトでの最大リトライ回数。                              |
+| **初期間隔** (`InitialBackoffInterval`) | **5秒** | 最初の失敗から次の試行までの待機時間。指数バックオフの開始点です。 |
+| **最大間隔** (`MaxBackoffInterval`) | **30秒** | 指数バックオフにより待機時間が最大となる秒数。サーバーへの過負荷を防ぎます。 |
+| **デフォルト最大試行回数** (`DefaultMaxRetries`) | **3回** | デフォルトでの最大リトライ回数。 |
 | **遅延戦略** | 指数バックオフ (Jitter適用) | 待機時間を指数関数的に増加させ、ランダムな揺らぎを加えることで、リトライの集中を避けます。 |
 
-  **注:** 最大試行回数を含む全ての設定は、`httpclient.New(...).WithMaxRetries(N)` メソッドやカスタム `pkg/retry.Config` を通じて、呼び出し元で上書き可能です。
+  **注:** 最大試行回数を含む全ての設定は、**`httpclient.New()` 関数に `httpclient.WithMaxRetries(N)` オプションを渡す**ことで上書き可能です。
 
 * **堅牢なHTTP処理 (GET/POST対応):** `context` を使用したタイムアウト制御に加え、**GETリクエストとJSON POSTリクエスト**の両方をサポートし、不安定なネットワーク環境や一時的なサーバーエラーに対応します。
 
@@ -114,16 +116,18 @@ func main() {
     // 1. HTTPクライアント (Fetcher) を設定
     // 個々のリクエストのタイムアウトを30秒に設定
     clientTimeout := 30 * time.Second 
-    fetcher := httpclient.New(clientTimeout).WithMaxRetries(5) // 例：デフォルト(3回)を上書きして最大5回のリトライを設定
     
-    // 2. Extractor を初期化 (DI)
+    // 2.WithMaxRetries は ClientOption として New 関数に渡す
+    fetcher := httpclient.New(clientTimeout, httpclient.WithMaxRetries(5)) // 例：デフォルト(3回)を上書きして最大5回のリトライを設定
+    
+    // 3. Extractor を初期化 (DI)
     extractor := web.NewExtractor(fetcher)
 
-    // 3. 全体処理のコンテキストを設定（例：全体で60秒のタイムアウト）
+    // 4. 全体処理のコンテキストを設定（例：全体で60秒のタイムアウト）
     ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
     defer cancel()
     
-    // 4. 抽出の実行
+    // 5. 抽出の実行
     text, hasBody, err := extractor.FetchAndExtractText(url, ctx)
     
     if err != nil {
@@ -149,7 +153,7 @@ func main() {
 | ディレクトリ | パッケージ名 | 役割 |
 | :--- | :--- | :--- |
 | `cmd/` | `main` | CLIのエントリーポイントおよびコマンドラインオプションの定義。 |
-| `pkg/httpclient` | `httpclient` | HTTPリクエストの実行、カスタムエラー（`NonRetryableHTTPError`）の定義。**`pkg/retry`** を利用して堅牢性を確保。`web.Fetcher` インターフェースを実装。 |
+| `pkg/httpclient` | `httpclient` | HTTPリクエストの実行、カスタムエラー（`NonRetryableHTTPError`）の定義。**`pkg/retry`** を利用して堅牢性を確保。**`Client` 構造体は `HTTPClient` インターフェースを満たします。** |
 | `pkg/retry` | `retry` | **汎用的なリトライ実行ロジック**（`backoff/v4` の設定、指数バックオフ、最大試行回数制御）を抽象化し、提供。 |
 | `pkg/web` | `web` | HTMLの解析 (`goquery`)、メインコンテンツの特定、ノイズ除去、テキスト整形ロジック。 |
 
