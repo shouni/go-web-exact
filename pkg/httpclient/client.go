@@ -16,13 +16,24 @@ import (
 )
 
 const (
-	// HTTPクライアント関連の定数
+	// DefaultHTTPTimeout は、HTTPクライアント関連の定数
 	DefaultHTTPTimeout = 30 * time.Second
 	// MaxResponseBodySize は、あらゆるHTTPレスポンスボディの最大読み込みサイズ
-	MaxResponseBodySize = int64(10 * 1024 * 1024) // 10MB
-	// サイトからのブロックを避けるためのUser-Agent
+	MaxResponseBodySize = int64(25 * 1024 * 1024) // 25MB
+	// UserAgent は、サイトからのブロックを避けるためのUser-Agent
 	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
 )
+
+// Client はHTTPリクエストと指数バックオフを用いたリトライロジックを管理します。
+type Client struct {
+	httpClient  HTTPClient
+	retryConfig retry.Config
+}
+
+// HTTPClient は、*http.Clientと互換性のあるHTTPクライアントのインターフェースを定義します。
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
 
 // NonRetryableHTTPError はHTTP 4xx系のステータスコードエラーを示すカスタムエラー型です。
 type NonRetryableHTTPError struct {
@@ -46,15 +57,9 @@ func (e *NonRetryableHTTPError) Error() string {
 	return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディなし", e.StatusCode)
 }
 
-// HTTPClient は、*http.Clientと互換性のあるHTTPクライアントのインターフェースを定義します。
-type HTTPClient interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
-// Client はHTTPリクエストと指数バックオフを用いたリトライロジックを管理します。
-type Client struct {
-	httpClient  HTTPClient
-	retryConfig retry.Config
+// Do は HTTPClient インターフェースが持つ Do メソッドを呼び出すラッパーです。
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	return c.httpClient.Do(req)
 }
 
 // ClientOption はClientの設定を行うための関数型です。
@@ -75,9 +80,8 @@ func New(timeout time.Duration, options ...ClientOption) *Client {
 	}
 
 	retryCfg := retry.DefaultConfig()
-
 	client := &Client{
-		httpClient: &http.Client{ // デフォルトのHTTPクライアント
+		httpClient: &http.Client{
 			Timeout: timeout,
 		},
 		retryConfig: retryCfg,
@@ -196,8 +200,7 @@ func (c *Client) doPostJSON(url string, requestBody []byte, ctx context.Context)
 	return handleResponse(resp)
 }
 
-// handleResponseはHTTPレスポンスを処理し、成功した場合はボディをバイト配列として返します。
-// エラーが発生した場合は、ステータスコードに応じてリトライ可能かどうかが判断できるエラーを返します。
+// handleResponse はHTTPレスポンスを処理し、成功した場合はボディをバイト配列として返します。エラーが発生した場合は、ステータスコードに応じてリトライ可能かどうかが判断できるエラーを返します。
 func handleResponse(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
 
