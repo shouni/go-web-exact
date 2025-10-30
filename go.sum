@@ -9,8 +9,8 @@ github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/shouni/go-utils v1.0.1 h1:LlC1VyOTYgRgDY2dW7BMc3vqpCpXivKvpiHV+wcG5CE=
-github.com/shouni/go-utils v1.0.1/go.mod h1:ZZntlEPg0KDyarAc8TlRNtEvCigStstBB0uq0BpjWWM=
+github.com/shouni/go-utils v1.0.2 h1:dZlUgEdW5J6xkD4WHo1+1Hb4PYvFEN4DbDLGuPijfpE=
+github.com/shouni/go-utils v1.0.2/go.mod h1:lR2yRm9jbmGcWdvax/y72Yek9k9iF9nDzBzfyyhSbTw=
 github.com/stretchr/objx v0.5.3 h1:jmXUvGomnU1o3W/V5h2VEradbpJDwGrzugQQvL0POH4=
 github.com/stretchr/objx v0.5.3/go.mod h1:rDQraq+vQZU7Fde9LOZLr8Tax6zZvy4kuNKF+QYS+U0=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shouni/go-utils" // utils パッケージをインポート
+	"github.com/shouni/go-utils/retry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -142,7 +142,7 @@ func TestFetchBytes_WithRetries(t *testing.T) {
 	url := "https://example.com"
 	ctx := context.Background()
 	// 修正: retry.Config を utils.Config に変更
-	retryCfg := utils.Config{
+	retryCfg := retry.Config{
 		MaxRetries: 2, // 初回含め最大3回実行
 	}
 
@@ -272,7 +272,7 @@ func TestPostJSONAndFetchBytes_WithRetries(t *testing.T) {
 	ctx := context.Background()
 
 	// 修正: retry.Config を utils.Config に変更
-	retryCfg := utils.Config{
+	retryCfg := retry.Config{
 		MaxRetries: 1, // 初回含め最大2回実行
 	}
 
