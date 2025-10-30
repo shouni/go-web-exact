@@ -40,7 +40,7 @@ const (
 	mainContentSelectors = "article, main, div[role='main'], #main, #content, .post-content, .article-body, .entry-content, .markdown-body, .readme"
 	noiseSelectors       = ".related-posts, .social-share, .comments, .ad-banner, .advertisement"
 
-	// pre を textExtractionTags から除去
+	// textExtractionTags は本文抽出に使用するHTMLタグを定義します。
 	textExtractionTags = "p, h1, h2, h3, h4, h5, h6, li, blockquote"
 
 	titlePrefix        = "【記事タイトル】 "

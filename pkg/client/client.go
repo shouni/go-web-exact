@@ -1,4 +1,4 @@
-package client
+package client // パッケージ名を client に変更
 
 import (
 	"bytes"
@@ -23,14 +23,14 @@ const (
 	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
 )
 
-// HTTPClient は、*http.Clientと互換性のあるHTTPクライアントのインターフェースを定義します。
-type HTTPClient interface {
+// Doer は、*http.Clientと互換性のあるHTTPクライアントのインターフェースを定義します。（変更）
+type Doer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
 // Client はHTTPリクエストと指数バックオフを用いたリトライロジックを管理します。
 type Client struct {
-	httpClient  HTTPClient
+	httpClient  Doer // HTTPClient から Doer に変更
 	retryConfig utils.Config
 }
 
@@ -60,8 +60,8 @@ func (e *NonRetryableHTTPError) Error() string {
 // ClientOption はClientの設定を行うための関数型です。
 type ClientOption func(*Client)
 
-// WithHTTPClient はカスタムのHTTPClientを設定します。
-func WithHTTPClient(client HTTPClient) ClientOption {
+// WithHTTPClient はカスタムのDoer（旧HTTPClient）を設定します。（変更）
+func WithHTTPClient(client Doer) ClientOption {
 	return func(c *Client) {
 		c.httpClient = client
 	}
@@ -97,14 +97,14 @@ func New(timeout time.Duration, options ...ClientOption) *Client {
 	return client
 }
 
-// Do は HTTPClient インターフェースが持つ Do メソッドを呼び出すラッパーです。
-// これにより、Client 型が HTTPClient インターフェースを満たします。
+// Do は Doer インターフェースが持つ Do メソッドを呼び出すラッパーです。（変更）
+// これにより、Client 型が Doer インターフェースを満たします。
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
 // FetchBytes は指定されたURLからリトライ付きでコンテンツをフェッチし、生のバイト配列として返します。
-// extract.Fetcher インターフェースを満たすためのメソッドです。
+// web.Fetcher インターフェースを満たすためのメソッドです。
 func (c *Client) FetchBytes(url string, ctx context.Context) ([]byte, error) {
 	var bodyBytes []byte
 	op := func() error {
