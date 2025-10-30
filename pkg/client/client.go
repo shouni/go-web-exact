@@ -178,9 +178,12 @@ func (c *Client) doWithRetry(ctx context.Context, operationName string, op func(
 func (c *Client) doFetchBytes(url string, ctx context.Context) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("GETリクエスト作成に失敗しました: %w", err)
+		// HTTPリクエスト作成時のエラーであることを明確にする
+		return nil, fmt.Errorf("HTTP GETリクエストの作成に失敗しました (URL: %s): %w", url, err)
 	}
+
 	c.addCommonHeaders(req)
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("URL %s へのHTTPリクエストに失敗しました (ネットワーク/接続エラー): %w", url, err)

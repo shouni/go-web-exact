@@ -26,6 +26,12 @@ type Extractor struct {
 
 // NewExtractor は、新しいExtractorのインスタンスを生成します。
 func NewExtractor(fetcher Fetcher) *Extractor {
+	if fetcher == nil {
+		// 依存オブジェクトがnilであることは通常、プログラミングエラーと見なされる
+		// ライブラリとして提供する場合、panicは避けたいが、
+		// この場合は依存性注入の契約違反として明確にする
+		panic("extract.NewExtractor: Fetcher cannot be nil")
+	}
 	return &Extractor{
 		fetcher: fetcher,
 	}
@@ -109,8 +115,7 @@ func (e *Extractor) extractContentText(doc *goquery.Document) (text string, hasB
 
 	// 6. テーブルを個別に処理
 	mainContent.Find("table").Each(func(i int, s *goquery.Selection) {
-		// メソッド呼び出しに変更
-		if content := e.processTable(s); content != "" {
+		if content := processTable(s); content != "" {
 			parts = append(parts, content)
 		}
 	})
@@ -150,7 +155,7 @@ func (e *Extractor) processGeneralElement(s *goquery.Selection) string {
 }
 
 // processTable は goquery.Selection からテーブルの内容を抽出し、整形します。
-func (e *Extractor) processTable(s *goquery.Selection) string {
+func processTable(s *goquery.Selection) string { // パッケージレベル関数に
 	var tableContent []string
 	captionText := strings.TrimSpace(s.Find("caption").First().Text())
 	if captionText != "" {
