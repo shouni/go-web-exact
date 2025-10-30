@@ -1,4 +1,4 @@
-package web
+package extract
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 // モック (Mock) の定義
 // ======================================================================
 
-// MockFetcher はテスト用の web.Fetcher インターフェースの実装です。
+// MockFetcher はテスト用の extract.Fetcher インターフェースの実装です。
 // NOTE: Extractor の Fetcher インターフェースを満たす必要があります。
 type MockFetcher struct {
 	htmlContent string

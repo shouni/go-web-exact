@@ -1,4 +1,4 @@
-package httpclient
+package client
 
 import (
 	"bytes"
@@ -104,7 +104,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 }
 
 // FetchBytes は指定されたURLからリトライ付きでコンテンツをフェッチし、生のバイト配列として返します。
-// web.Fetcher インターフェースを満たすためのメソッドです。
+// extract.Fetcher インターフェースを満たすためのメソッドです。
 func (c *Client) FetchBytes(url string, ctx context.Context) ([]byte, error) {
 	var bodyBytes []byte
 	op := func() error {
@@ -256,7 +256,7 @@ func (c *Client) isHTTPRetryableError(err error) bool {
 }
 
 // HandleLimitedResponse は、指定されたレスポンスボディを、最大サイズに制限して読み込みます。
-// Notifier パッケージから httpclient.HandleLimitedResponse(resp, limit) として呼び出されます。
+// Notifier パッケージから client.HandleLimitedResponse(resp, limit) として呼び出されます。
 func HandleLimitedResponse(resp *http.Response, limit int64) ([]byte, error) {
 	defer resp.Body.Close()
 	limitedReader := io.LimitReader(resp.Body, limit)
