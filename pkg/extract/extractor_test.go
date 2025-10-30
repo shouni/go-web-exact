@@ -20,7 +20,7 @@ type MockFetcher struct {
 	fetchError  error
 }
 
-// FetchBytes はモックされたHTMLをバイト配列として返すか、エラーを返します。（修正済み）
+// FetchBytes はモックされたHTMLをバイト配列として返すか、エラーを返します。
 func (m *MockFetcher) FetchBytes(url string, ctx context.Context) ([]byte, error) {
 	if m.fetchError != nil {
 		return nil, m.fetchError
@@ -32,6 +32,24 @@ func (m *MockFetcher) FetchBytes(url string, ctx context.Context) ([]byte, error
 // ======================================================================
 // テスト関数
 // ======================================================================
+
+func TestNewExtractor(t *testing.T) {
+	t.Run("success_with_valid_fetcher", func(t *testing.T) {
+		fetcher := &MockFetcher{}
+		extractor, err := NewExtractor(fetcher)
+		assert.NoError(t, err)
+		assert.NotNil(t, extractor)
+		assert.Equal(t, fetcher, extractor.fetcher)
+	})
+
+	t.Run("error_with_nil_fetcher", func(t *testing.T) {
+		// 修正: NewExtractorがnilを許容しない契約をテスト
+		extractor, err := NewExtractor(nil)
+		assert.Error(t, err)
+		assert.Nil(t, extractor)
+		assert.Contains(t, err.Error(), "Fetcher cannot be nil")
+	})
+}
 
 // TestFetchAndExtractText は Extractor の主要なメソッドをテストします。
 func TestFetchAndExtractText(t *testing.T) {
@@ -100,17 +118,14 @@ func TestFetchAndExtractText(t *testing.T) {
 		{
 			name: "document_with_table_and_pre",
 			html: `<html><head><title>Code Table</title></head><body><div id="content">
-    				<table><caption>Data Table</caption><tr><th>Col1</th><td>Val1</td></tr></table>
-    				<pre>
-					    func hello() {}
-    				</pre>
-    			</div></body></html>`,
-			// 修正点:
-			// 1. 順序を Actual (pre -> table) に合わせる。
-			// 2. pre の内容は TrimSpace() されるため、インデントを除去する。
+                <table><caption>Data Table</caption><tr><th>Col1</th><td>Val1</td></tr></table>
+                <pre>
+                   func hello() {}
+                </pre>
+               </div></body></html>`,
 			expectedText: titlePrefix + "Code Table" + "\n\n" +
 				"```\n" +
-				"func hello() {}" + "\n" + // TrimSpaceによりインデントは削除
+				"func hello() {}" + "\n" +
 				"```" + "\n\n" +
 				tableCaptionPrefix + "Data Table" + "\n" +
 				"Col1 | Val1",
@@ -146,8 +161,11 @@ func TestFetchAndExtractText(t *testing.T) {
 				htmlContent: tc.html,
 				fetchError:  tc.fetchErr,
 			}
-			// web.NewExtractor を呼び出し
-			extractor := NewExtractor(fetcher)
+
+			// 修正: NewExtractorの戻り値を受け取るように変更し、エラーをチェック
+			extractor, err := NewExtractor(fetcher)
+			assert.NoError(t, err) // NewExtractorのnilチェックは既にTestNewExtractorで確認済み
+
 			ctx := context.Background()
 
 			// 実行
