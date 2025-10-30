@@ -1,21 +1,19 @@
-module github.com/shouni/go-web-exact
+module github.com/shouni/go-web-exact/v2
 
-go 1.25
+go 1.24.0
 
 require (
 	github.com/PuerkitoBio/goquery v1.10.3
-	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/spf13/cobra v1.10.1
+	github.com/shouni/go-utils v1.0.1
 	github.com/stretchr/testify v1.11.1
 )
 
 require (
 	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/spf13/pflag v1.0.9 // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
-	golang.org/x/net v0.39.0 // indirect
+	github.com/stretchr/objx v0.5.3 // indirect
+	golang.org/x/net v0.46.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

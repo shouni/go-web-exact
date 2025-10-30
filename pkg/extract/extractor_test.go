@@ -1,13 +1,11 @@
-package web
+package extract
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,29 +13,43 @@ import (
 // モック (Mock) の定義
 // ======================================================================
 
-// MockFetcher はテスト用の web.Fetcher インターフェースの実装です。
+// MockFetcher はテスト用の extract.Fetcher インターフェースの実装です。
 // NOTE: Extractor の Fetcher インターフェースを満たす必要があります。
 type MockFetcher struct {
 	htmlContent string
 	fetchError  error
 }
 
-// FetchDocument はモックされたHTMLを返すか、エラーを返します。
-func (m *MockFetcher) FetchDocument(url string, ctx context.Context) (*goquery.Document, error) {
+// FetchBytes はモックされたHTMLをバイト配列として返すか、エラーを返します。
+func (m *MockFetcher) FetchBytes(url string, ctx context.Context) ([]byte, error) {
 	if m.fetchError != nil {
 		return nil, m.fetchError
 	}
-	// goquery.NewDocumentFromReaderを使用してHTMLを解析
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(m.htmlContent))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
-	}
-	return doc, nil
+	// HTMLの内容をそのままバイト配列として返します
+	return []byte(m.htmlContent), nil
 }
 
 // ======================================================================
 // テスト関数
 // ======================================================================
+
+func TestNewExtractor(t *testing.T) {
+	t.Run("success_with_valid_fetcher", func(t *testing.T) {
+		fetcher := &MockFetcher{}
+		extractor, err := NewExtractor(fetcher)
+		assert.NoError(t, err)
+		assert.NotNil(t, extractor)
+		assert.Equal(t, fetcher, extractor.fetcher)
+	})
+
+	t.Run("error_with_nil_fetcher", func(t *testing.T) {
+		// 修正: NewExtractorがnilを許容しない契約をテスト
+		extractor, err := NewExtractor(nil)
+		assert.Error(t, err)
+		assert.Nil(t, extractor)
+		assert.Contains(t, err.Error(), "Fetcher cannot be nil")
+	})
+}
 
 // TestFetchAndExtractText は Extractor の主要なメソッドをテストします。
 func TestFetchAndExtractText(t *testing.T) {
@@ -69,8 +81,8 @@ func TestFetchAndExtractText(t *testing.T) {
 
 		// 2. タイトルのみのドキュメントのテスト (短いテキストは無視される)
 		{
-			name: "document_with_title_only",
-			html: `<html><head><title>Test Title</title></head><body><p>Short text</p></body></html>`,
+			name:              "document_with_title_only",
+			html:              `<html><head><title>Test Title</title></head><body><p>Short text</p></body></html>`,
 			expectedText:      titlePrefix + "Test Title",
 			expectedBodyFound: false, // 短い段落は本文と見なされない
 			expectedError:     false,
@@ -78,9 +90,9 @@ func TestFetchAndExtractText(t *testing.T) {
 
 		// 3. メインコンテンツとタイトルのドキュメントのテスト (長い段落を抽出)
 		{
-			name: "document_with_main_content_and_title",
-			html: fmt.Sprintf(`<html><head><title>Title</title></head><body><main><p>%s</p></main></body></html>`, longParagraph),
-			expectedText: titlePrefix + "Title" + "\n\n" + longParagraph,
+			name:              "document_with_main_content_and_title",
+			html:              fmt.Sprintf(`<html><head><title>Title</title></head><body><main><p>%s</p></main></body></html>`, longParagraph),
+			expectedText:      titlePrefix + "Title" + "\n\n" + longParagraph,
 			expectedBodyFound: true,
 			expectedError:     false,
 		},
@@ -89,11 +101,11 @@ func TestFetchAndExtractText(t *testing.T) {
 		{
 			name: "document_with_headings_and_paragraphs",
 			html: fmt.Sprintf(`<html><head><title>Test Page</title></head><body><article>
-					<h1>Heading 1 Long Enough Title</h1>
-					<p>Short</p>
-					<h2>H2 Long Enough</h2>
-					<p>%s</p>
-				  </article></body></html>`, longParagraph),
+                <h1>Heading 1 Long Enough Title</h1>
+                <p>Short</p>
+                <h2>H2 Long Enough</h2>
+                <p>%s</p>
+               </article></body></html>`, longParagraph),
 			expectedText: titlePrefix + "Test Page" + "\n\n" +
 				"## Heading 1 Long Enough Title" + "\n\n" +
 				"## H2 Long Enough" + "\n\n" +
@@ -106,17 +118,14 @@ func TestFetchAndExtractText(t *testing.T) {
 		{
 			name: "document_with_table_and_pre",
 			html: `<html><head><title>Code Table</title></head><body><div id="content">
-					<table><caption>Data Table</caption><tr><th>Col1</th><td>Val1</td></tr></table>
-					<pre>
-						func hello() {}
-					</pre>
-				  </div></body></html>`,
-			// 修正点:
-			// 1. 順序を Actual (pre -> table) に合わせる。
-			// 2. pre の内容は TrimSpace() されるため、インデントを除去する。
+                <table><caption>Data Table</caption><tr><th>Col1</th><td>Val1</td></tr></table>
+                <pre>
+                   func hello() {}
+                </pre>
+               </div></body></html>`,
 			expectedText: titlePrefix + "Code Table" + "\n\n" +
 				"```\n" +
-				"func hello() {}" + "\n" + // TrimSpaceによりインデントは削除
+				"func hello() {}" + "\n" +
 				"```" + "\n\n" +
 				tableCaptionPrefix + "Data Table" + "\n" +
 				"Col1 | Val1",
@@ -137,9 +146,9 @@ func TestFetchAndExtractText(t *testing.T) {
 
 		// 7. エラーケース: 何も抽出できない場合
 		{
-			name: "empty_document_error",
-			html: `<html><head><title></title></head><body></body></html>`,
-			expectedText: "",
+			name:              "empty_document_error",
+			html:              `<html><head><title></title></head><body></body></html>`,
+			expectedText:      "",
 			expectedBodyFound: false,
 			expectedError:     true, // "webページから何も抽出できませんでした" が期待される
 		},
@@ -152,8 +161,11 @@ func TestFetchAndExtractText(t *testing.T) {
 				htmlContent: tc.html,
 				fetchError:  tc.fetchErr,
 			}
-			// web.NewExtractor を呼び出し
-			extractor := NewExtractor(fetcher)
+
+			// 修正: NewExtractorの戻り値を受け取るように変更し、エラーをチェック
+			extractor, err := NewExtractor(fetcher)
+			assert.NoError(t, err) // NewExtractorのnilチェックは既にTestNewExtractorで確認済み
+
 			ctx := context.Background()
 
 			// 実行

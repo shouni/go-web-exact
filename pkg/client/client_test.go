@@ -1,27 +1,35 @@
-package httpclient
+package client
 
 import (
 	"bytes"
 	"context"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/shouni/go-web-exact/pkg/retry"
+	"github.com/shouni/go-utils" // utils パッケージをインポート
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
+// MockHTTPClient は http.Client の Do メソッドをモックします。
+// Doer インターフェースを満たします。
 type MockHTTPClient struct {
 	mock.Mock
 }
 
 func (m *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	args := m.Called(req)
-	return args.Get(0).(*http.Response), args.Error(1)
+	err := args.Error(1) // エラーは常に取得
+
+	// レスポンスが存在する場合のみ型アサーションを行う
+	if args.Get(0) != nil {
+		return args.Get(0).(*http.Response), err
+	}
+	return nil, err
 }
 
 func TestNew(t *testing.T) {
@@ -41,12 +49,13 @@ func TestNew(t *testing.T) {
 	})
 }
 
+// WithMaxRetries は ClientOption なので New 関数内でテストする
 func TestWithMaxRetries(t *testing.T) {
-	client := &Client{
-		retryConfig: retry.Config{},
-	}
-	client.WithMaxRetries(5)
-	assert.Equal(t, uint64(5), client.retryConfig.MaxRetries)
+	t.Run("sets max retries via option", func(t *testing.T) {
+		client := New(0, WithMaxRetries(5))
+		// 内部の utils.Config の値を確認
+		assert.Equal(t, uint64(5), client.retryConfig.MaxRetries)
+	})
 }
 
 func TestNonRetryableHTTPError_Error(t *testing.T) {
@@ -69,61 +78,77 @@ func TestNonRetryableHTTPError_Error(t *testing.T) {
 	}
 }
 
-func TestFetchDocument(t *testing.T) {
+func TestFetchBytes(t *testing.T) {
+	url := "https://example.com"
+	ctx := context.Background()
+
 	t.Run("successful fetch", func(t *testing.T) {
 		mockClient := new(MockHTTPClient)
-		mockBody := bytes.NewReader([]byte("<html></html>"))
+		expectedBody := []byte("<html></html>")
+		mockBody := bytes.NewReader(expectedBody)
 		mockResponse := &http.Response{
 			StatusCode: http.StatusOK,
-			Body:       ioutil.NopCloser(mockBody),
+			Body:       io.NopCloser(mockBody),
 		}
-		mockClient.On("Do", mock.Anything).Return(mockResponse, nil)
+		mockClient.On("Do", mock.Anything).Return(mockResponse, nil).Once()
 
-		client := &Client{httpClient: mockClient}
-		doc, err := client.FetchDocument("https://example.com", context.Background())
+		client := New(0, WithHTTPClient(mockClient))
+		body, err := client.FetchBytes(url, ctx)
 		assert.NoError(t, err)
-		assert.NotNil(t, doc)
+		assert.Equal(t, expectedBody, body)
 		mockClient.AssertExpectations(t)
 	})
+
 	t.Run("http client error", func(t *testing.T) {
 		mockClient := new(MockHTTPClient)
-
 		var resp *http.Response
+		// Mockが呼び出されることを確認するが、リトライは無効化する
 		mockClient.On("Do", mock.Anything).Return(resp, errors.New("network error"))
 
-		client := &Client{httpClient: mockClient}
-		doc, err := client.FetchDocument("https://example.com", context.Background())
+		// リトライが発動しないように、WithMaxRetries(0) を設定したClientを生成
+		client := New(0,
+			WithHTTPClient(mockClient),
+			WithMaxRetries(0),
+		)
+
+		body, err := client.FetchBytes(url, ctx)
 		assert.Error(t, err)
-		assert.Nil(t, doc)
+		assert.Nil(t, body)
+
 		mockClient.AssertExpectations(t)
+		// 呼び出し回数が1回であることを明示的に検証
+		mockClient.AssertNumberOfCalls(t, "Do", 1)
 	})
+
 	t.Run("non-retryable error", func(t *testing.T) {
 		mockClient := new(MockHTTPClient)
 		mockBody := bytes.NewReader([]byte("bad request"))
 		mockResponse := &http.Response{
 			StatusCode: http.StatusBadRequest,
-			Body:       ioutil.NopCloser(mockBody),
+			Body:       io.NopCloser(mockBody),
 		}
-		mockClient.On("Do", mock.Anything).Return(mockResponse, nil)
+		mockClient.On("Do", mock.Anything).Return(mockResponse, nil).Once()
 
-		client := &Client{httpClient: mockClient}
-		doc, err := client.FetchDocument("https://example.com", context.Background())
+		client := New(0, WithHTTPClient(mockClient))
+		body, err := client.FetchBytes(url, ctx)
 		assert.Error(t, err)
-		assert.Nil(t, doc)
+		assert.Nil(t, body)
 		mockClient.AssertExpectations(t)
 	})
 }
 
 // --- リトライロジックの検証テスト ---
-func TestFetchDocument_WithRetries(t *testing.T) {
-	// MinDelay/MaxDelay を削除し、デフォルト設定を使用
-	retryCfg := retry.Config{
-		MaxRetries: 2,
+func TestFetchBytes_WithRetries(t *testing.T) {
+	url := "https://example.com"
+	ctx := context.Background()
+	// 修正: retry.Config を utils.Config に変更
+	retryCfg := utils.Config{
+		MaxRetries: 2, // 初回含め最大3回実行
 	}
 
 	t.Run("successful fetch after retries (network error)", func(t *testing.T) {
 		mockClient := new(MockHTTPClient)
-		mockBody := bytes.NewReader([]byte("<html></html>"))
+		expectedBody := []byte("Success")
 		var resp *http.Response // 型付きのnil
 
 		// 1回目: ネットワークエラー (リトライ対象)
@@ -132,20 +157,20 @@ func TestFetchDocument_WithRetries(t *testing.T) {
 		).Once()
 		// 2回目: サーバーエラー (リトライ対象)
 		mockClient.On("Do", mock.Anything).Return(
-			&http.Response{StatusCode: http.StatusGatewayTimeout, Body: ioutil.NopCloser(bytes.NewReader(nil))}, nil,
+			&http.Response{StatusCode: http.StatusGatewayTimeout, Body: io.NopCloser(bytes.NewReader(nil))}, nil,
 		).Once()
 		// 3回目: 成功 (リトライ終了)
 		mockClient.On("Do", mock.Anything).Return(
-			&http.Response{StatusCode: http.StatusOK, Body: ioutil.NopCloser(mockBody)}, nil,
+			&http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(expectedBody))}, nil,
 		).Once()
 
 		client := &Client{
 			httpClient:  mockClient,
 			retryConfig: retryCfg,
 		}
-		doc, err := client.FetchDocument("https://example.com", context.Background())
+		body, err := client.FetchBytes(url, ctx)
 		assert.NoError(t, err)
-		assert.NotNil(t, doc)
+		assert.Equal(t, expectedBody, body)
 		mockClient.AssertExpectations(t)
 		mockClient.AssertNumberOfCalls(t, "Do", 3) // 3回呼ばれたことを確認
 	})
@@ -155,20 +180,16 @@ func TestFetchDocument_WithRetries(t *testing.T) {
 		var resp *http.Response
 
 		// MaxRetries=2 のため、Doは合計3回（初回＋2回リトライ）呼ばれる
-		// 1回目: エラー
-		mockClient.On("Do", mock.Anything).Return(resp, errors.New("network error 1")).Once()
-		// 2回目: エラー
-		mockClient.On("Do", mock.Anything).Return(resp, errors.New("network error 2")).Once()
-		// 3回目: エラー (MaxRetries に到達)
-		mockClient.On("Do", mock.Anything).Return(resp, errors.New("final network error")).Once()
+		// 全てエラーを返す
+		mockClient.On("Do", mock.Anything).Return(resp, errors.New("network error")).Times(3)
 
 		client := &Client{
 			httpClient:  mockClient,
 			retryConfig: retryCfg,
 		}
-		doc, err := client.FetchDocument("https://example.com", context.Background())
+		body, err := client.FetchBytes(url, ctx)
 		assert.Error(t, err)
-		assert.Nil(t, doc)
+		assert.Nil(t, body)
 
 		// 3回呼ばれたことを確認
 		mockClient.AssertNumberOfCalls(t, "Do", 3)
@@ -180,17 +201,17 @@ func TestFetchDocument_WithRetries(t *testing.T) {
 
 		// 1回目: 404 Not Found (非リトライ対象)
 		mockClient.On("Do", mock.Anything).Return(
-			&http.Response{StatusCode: http.StatusNotFound, Body: ioutil.NopCloser(mockBody)}, nil,
+			&http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(mockBody)}, nil,
 		).Once()
 
 		client := &Client{
 			httpClient:  mockClient,
 			retryConfig: retryCfg, // リトライ設定があっても発動しない
 		}
-		doc, err := client.FetchDocument("https://example.com", context.Background())
+		body, err := client.FetchBytes(url, ctx)
 		assert.Error(t, err)
 		assert.True(t, IsNonRetryableError(err))
-		assert.Nil(t, doc)
+		assert.Nil(t, body)
 
 		// 1回しか呼ばれていないことを確認
 		mockClient.AssertNumberOfCalls(t, "Do", 1)
@@ -198,40 +219,46 @@ func TestFetchDocument_WithRetries(t *testing.T) {
 }
 
 func TestPostJSONAndFetchBytes(t *testing.T) {
+	url := "https://example.com"
+	data := map[string]string{"key": "test"}
+	ctx := context.Background()
+
 	t.Run("successful post and fetch", func(t *testing.T) {
 		mockClient := new(MockHTTPClient)
-		mockBody := bytes.NewReader([]byte(`{"key":"value"}`))
+		expectedBody := []byte(`{"key":"value"}`)
+		mockBody := bytes.NewReader(expectedBody)
 		mockResponse := &http.Response{
 			StatusCode: http.StatusOK,
-			Body:       ioutil.NopCloser(mockBody),
+			Body:       io.NopCloser(mockBody),
 		}
-		mockClient.On("Do", mock.Anything).Return(mockResponse, nil)
+		mockClient.On("Do", mock.Anything).Return(mockResponse, nil).Once()
 
-		client := &Client{httpClient: mockClient}
-		data := map[string]string{"key": "test"}
-		body, err := client.PostJSONAndFetchBytes("https://example.com", data, context.Background())
+		client := New(0, WithHTTPClient(mockClient))
+		body, err := client.PostJSONAndFetchBytes(url, data, ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, []byte(`{"key":"value"}`), body)
+		assert.Equal(t, expectedBody, body)
 		mockClient.AssertExpectations(t)
 	})
+
 	t.Run("json serialization error", func(t *testing.T) {
 		client := &Client{}
-		body, err := client.PostJSONAndFetchBytes("https://example.com", make(chan int), context.Background())
+		// marshalできないチャネルを渡す
+		body, err := client.PostJSONAndFetchBytes(url, make(chan int), ctx)
 		assert.Error(t, err)
 		assert.Nil(t, body)
 	})
+
 	t.Run("non-retryable error", func(t *testing.T) {
 		mockClient := new(MockHTTPClient)
 		mockBody := bytes.NewReader([]byte("bad request"))
 		mockResponse := &http.Response{
 			StatusCode: http.StatusBadRequest,
-			Body:       ioutil.NopCloser(mockBody),
+			Body:       io.NopCloser(mockBody),
 		}
-		mockClient.On("Do", mock.Anything).Return(mockResponse, nil)
+		mockClient.On("Do", mock.Anything).Return(mockResponse, nil).Once()
 
-		client := &Client{httpClient: mockClient}
-		data := map[string]string{"key": "test"}
-		body, err := client.PostJSONAndFetchBytes("https://example.com", data, context.Background())
+		client := New(0, WithHTTPClient(mockClient))
+		body, err := client.PostJSONAndFetchBytes(url, data, ctx)
 		assert.Error(t, err)
 		assert.Nil(t, body)
 		mockClient.AssertExpectations(t)
@@ -240,21 +267,26 @@ func TestPostJSONAndFetchBytes(t *testing.T) {
 
 // PostJSONAndFetchBytes に対するリトライテスト
 func TestPostJSONAndFetchBytes_WithRetries(t *testing.T) {
-	// MinDelay/MaxDelay を削除し、デフォルト設定を使用
-	retryCfg := retry.Config{
+	url := "https://example.com"
+	data := map[string]string{"key": "test"}
+	ctx := context.Background()
+
+	// 修正: retry.Config を utils.Config に変更
+	retryCfg := utils.Config{
 		MaxRetries: 1, // 初回含め最大2回実行
 	}
 
 	t.Run("successful post after 5xx retry", func(t *testing.T) {
 		mockClient := new(MockHTTPClient)
+		expectedBody := []byte(`{"status":"ok"}`)
 		mockResponse := &http.Response{
 			StatusCode: http.StatusOK,
-			Body:       ioutil.NopCloser(bytes.NewReader([]byte(`{"status":"ok"}`))),
+			Body:       io.NopCloser(bytes.NewReader(expectedBody)),
 		}
 
 		// 1回目: サーバーエラー (503 Service Unavailable)
 		mockClient.On("Do", mock.Anything).Return(
-			&http.Response{StatusCode: http.StatusServiceUnavailable, Body: ioutil.NopCloser(bytes.NewReader(nil))}, nil,
+			&http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(bytes.NewReader(nil))}, nil,
 		).Once()
 		// 2回目: 成功
 		mockClient.On("Do", mock.Anything).Return(
@@ -265,11 +297,10 @@ func TestPostJSONAndFetchBytes_WithRetries(t *testing.T) {
 			httpClient:  mockClient,
 			retryConfig: retryCfg,
 		}
-		data := map[string]string{"key": "test"}
-		body, err := client.PostJSONAndFetchBytes("https://example.com", data, context.Background())
+		body, err := client.PostJSONAndFetchBytes(url, data, ctx)
 
 		assert.NoError(t, err)
-		assert.Equal(t, []byte(`{"status":"ok"}`), body)
+		assert.Equal(t, expectedBody, body)
 		mockClient.AssertNumberOfCalls(t, "Do", 2)
 	})
 }
