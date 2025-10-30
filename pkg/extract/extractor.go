@@ -25,16 +25,13 @@ type Extractor struct {
 }
 
 // NewExtractor は、新しいExtractorのインスタンスを生成します。
-func NewExtractor(fetcher Fetcher) *Extractor {
+func NewExtractor(fetcher Fetcher) (*Extractor, error) {
 	if fetcher == nil {
-		// 依存オブジェクトがnilであることは通常、プログラミングエラーと見なされる
-		// ライブラリとして提供する場合、panicは避けたいが、
-		// この場合は依存性注入の契約違反として明確にする
-		panic("extract.NewExtractor: Fetcher cannot be nil")
+		return nil, fmt.Errorf("extract.NewExtractor: Fetcher cannot be nil")
 	}
 	return &Extractor{
 		fetcher: fetcher,
-	}
+	}, nil
 }
 
 // ----------------------------------------------------------------------
