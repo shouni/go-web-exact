@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shouni/go-utils"
+	"github.com/shouni/go-utils/retry"
 )
 
 const (
@@ -31,7 +31,7 @@ type Doer interface {
 // Client はHTTPリクエストと指数バックオフを用いたリトライロジックを管理します。
 type Client struct {
 	httpClient  Doer // HTTPClient から Doer に変更
-	retryConfig utils.Config
+	retryConfig retry.Config
 }
 
 // NonRetryableHTTPError はHTTP 4xx系のステータスコードエラーを示すカスタムエラー型です。
@@ -82,7 +82,7 @@ func New(timeout time.Duration, options ...ClientOption) *Client {
 	}
 
 	// go-utils のデフォルト設定を利用する
-	retryCfg := utils.DefaultConfig()
+	retryCfg := retry.DefaultConfig()
 	client := &Client{
 		httpClient: &http.Client{
 			Timeout: timeout,
@@ -165,7 +165,7 @@ func (c *Client) addCommonHeaders(req *http.Request) {
 
 // doWithRetry は リトライロジックを実行します。
 func (c *Client) doWithRetry(ctx context.Context, operationName string, op func() error) error {
-	return utils.Do(
+	return retry.Do(
 		ctx,
 		c.retryConfig,
 		operationName,

@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/PuerkitoBio/goquery v1.10.3
-	github.com/shouni/go-utils v1.0.1
+	github.com/shouni/go-utils v1.0.2
 	github.com/stretchr/testify v1.11.1
 )
 
