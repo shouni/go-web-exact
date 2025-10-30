@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -12,10 +13,10 @@ import (
 // 依存性の定義 (DIP)
 // ----------------------------------------------------------------------
 
-// Fetcher は、HTMLドキュメントを取得する機能のインターフェースを定義します。
+// Fetcher は、HTMLドキュメントの生バイト配列を取得する機能のインターフェースを定義します。
 // Extractor は、この抽象に依存します。
 type Fetcher interface {
-	FetchDocument(url string, ctx context.Context) (*goquery.Document, error)
+	FetchBytes(url string, ctx context.Context) ([]byte, error)
 }
 
 // Extractor は、Fetcher を使ってコンテンツ抽出プロセスを管理します。
@@ -63,12 +64,18 @@ func normalizeText(text string) string {
 
 // FetchAndExtractText は指定されたURLからコンテンツを取得し、整形されたテキストを抽出します。
 func (e *Extractor) FetchAndExtractText(url string, ctx context.Context) (text string, hasBodyFound bool, err error) {
-	doc, err := e.fetcher.FetchDocument(url, ctx)
+	// 1. Fetcherから生のバイト配列を取得 (通信の責務)
+	htmlBytes, err := e.fetcher.FetchBytes(url, ctx)
 	if err != nil {
 		return "", false, err
 	}
 
-	// メソッド呼び出しに変更
+	// 2. Extractor内でgoquery.Documentに変換 (解析の責務)
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(htmlBytes))
+	if err != nil {
+		return "", false, fmt.Errorf("HTML解析に失敗しました: %w", err)
+	}
+
 	return e.extractContentText(doc)
 }
 
