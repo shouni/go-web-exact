@@ -9,10 +9,11 @@ import (
 )
 
 // ----------------------------------------------------------------------
-// 依存性の定義 (DI)
+// 依存性の定義 (DIP)
 // ----------------------------------------------------------------------
 
 // Fetcher は、HTMLドキュメントを取得する機能のインターフェースを定義します。
+// Extractor は、この抽象に依存します。
 type Fetcher interface {
 	FetchDocument(url string, ctx context.Context) (*goquery.Document, error)
 }
@@ -38,7 +39,7 @@ const (
 	mainContentSelectors = "article, main, div[role='main'], #main, #content, .post-content, .article-body, .entry-content, .markdown-body, .readme"
 	noiseSelectors       = ".related-posts, .social-share, .comments, .ad-banner, .advertisement"
 
-	// pre を textExtractionTags から除去 (以前の修正)
+	// pre を textExtractionTags から除去
 	textExtractionTags = "p, h1, h2, h3, h4, h5, h6, li, blockquote"
 
 	titlePrefix        = "【記事タイトル】 "
@@ -67,7 +68,7 @@ func (e *Extractor) FetchAndExtractText(url string, ctx context.Context) (text s
 		return "", false, err
 	}
 
-	// ★ 修正: メソッド呼び出しに変更
+	// メソッド呼び出しに変更
 	return e.extractContentText(doc)
 }
 
@@ -101,7 +102,7 @@ func (e *Extractor) extractContentText(doc *goquery.Document) (text string, hasB
 
 	// 6. テーブルを個別に処理
 	mainContent.Find("table").Each(func(i int, s *goquery.Selection) {
-		// ★ 修正: メソッド呼び出しに変更
+		// メソッド呼び出しに変更
 		if content := e.processTable(s); content != "" {
 			parts = append(parts, content)
 		}
@@ -142,8 +143,6 @@ func (e *Extractor) processGeneralElement(s *goquery.Selection) string {
 }
 
 // processTable は goquery.Selection からテーブルの内容を抽出し、整形します。
-// Extractor の状態に依存しないため、パッケージレベル関数とすることも可能ですが、
-// Extractor のロジックの一部として一貫性のためメソッドとして保持します。
 func (e *Extractor) processTable(s *goquery.Selection) string {
 	var tableContent []string
 	captionText := strings.TrimSpace(s.Find("caption").First().Text())

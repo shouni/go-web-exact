@@ -69,8 +69,8 @@ func TestFetchAndExtractText(t *testing.T) {
 
 		// 2. タイトルのみのドキュメントのテスト (短いテキストは無視される)
 		{
-			name: "document_with_title_only",
-			html: `<html><head><title>Test Title</title></head><body><p>Short text</p></body></html>`,
+			name:              "document_with_title_only",
+			html:              `<html><head><title>Test Title</title></head><body><p>Short text</p></body></html>`,
 			expectedText:      titlePrefix + "Test Title",
 			expectedBodyFound: false, // 短い段落は本文と見なされない
 			expectedError:     false,
@@ -78,9 +78,9 @@ func TestFetchAndExtractText(t *testing.T) {
 
 		// 3. メインコンテンツとタイトルのドキュメントのテスト (長い段落を抽出)
 		{
-			name: "document_with_main_content_and_title",
-			html: fmt.Sprintf(`<html><head><title>Title</title></head><body><main><p>%s</p></main></body></html>`, longParagraph),
-			expectedText: titlePrefix + "Title" + "\n\n" + longParagraph,
+			name:              "document_with_main_content_and_title",
+			html:              fmt.Sprintf(`<html><head><title>Title</title></head><body><main><p>%s</p></main></body></html>`, longParagraph),
+			expectedText:      titlePrefix + "Title" + "\n\n" + longParagraph,
 			expectedBodyFound: true,
 			expectedError:     false,
 		},
@@ -137,9 +137,9 @@ func TestFetchAndExtractText(t *testing.T) {
 
 		// 7. エラーケース: 何も抽出できない場合
 		{
-			name: "empty_document_error",
-			html: `<html><head><title></title></head><body></body></html>`,
-			expectedText: "",
+			name:              "empty_document_error",
+			html:              `<html><head><title></title></head><body></body></html>`,
+			expectedText:      "",
 			expectedBodyFound: false,
 			expectedError:     true, // "webページから何も抽出できませんでした" が期待される
 		},

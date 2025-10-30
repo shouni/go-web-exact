@@ -11,8 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
-	"github.com/shouni/go-web-exact/pkg/retry"
+	"github.com/shouni/go-utils"
 )
 
 const (
@@ -32,7 +31,7 @@ type HTTPClient interface {
 // Client はHTTPリクエストと指数バックオフを用いたリトライロジックを管理します。
 type Client struct {
 	httpClient  HTTPClient
-	retryConfig retry.Config
+	retryConfig utils.Config
 }
 
 // NonRetryableHTTPError はHTTP 4xx系のステータスコードエラーを示すカスタムエラー型です。
@@ -82,7 +81,8 @@ func New(timeout time.Duration, options ...ClientOption) *Client {
 		timeout = DefaultHTTPTimeout
 	}
 
-	retryCfg := retry.DefaultConfig()
+	// go-utils のデフォルト設定を利用する
+	retryCfg := utils.DefaultConfig()
 	client := &Client{
 		httpClient: &http.Client{
 			Timeout: timeout,
@@ -103,26 +103,6 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
-// FetchDocument はURLからHTMLを取得し、goquery.Documentを返します。
-func (c *Client) FetchDocument(url string, ctx context.Context) (*goquery.Document, error) {
-	var doc *goquery.Document
-	op := func() error {
-		var fetchErr error
-		doc, fetchErr = c.doFetch(url, ctx)
-		return fetchErr // エラーが発生した場合はそのまま返す
-	}
-
-	err := c.doWithRetry(
-		ctx,
-		fmt.Sprintf("URL(%s)のフェッチ", url),
-		op,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return doc, nil
-}
-
 // PostJSONAndFetchBytes は指定されたデータをJSONとしてPOSTし、レスポンスボディをバイト配列として返します。
 func (c *Client) PostJSONAndFetchBytes(url string, data any, ctx context.Context) ([]byte, error) {
 	requestBody, err := json.Marshal(data)
@@ -130,6 +110,7 @@ func (c *Client) PostJSONAndFetchBytes(url string, data any, ctx context.Context
 		return nil, fmt.Errorf("JSONデータのシリアライズに失敗しました: %w", err)
 	}
 	var bodyBytes []byte
+
 	op := func() error {
 		var postErr error
 		bodyBytes, postErr = c.doPostJSON(url, requestBody, ctx)
@@ -161,39 +142,15 @@ func (c *Client) addCommonHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", UserAgent)
 }
 
-// doWithRetry は共通のリトライロジックを実行します。
+// doWithRetry は リトライロジックを実行します。
 func (c *Client) doWithRetry(ctx context.Context, operationName string, op func() error) error {
-	return retry.Do(
+	return utils.Do(
 		ctx,
 		c.retryConfig,
 		operationName,
 		op,
 		c.isHTTPRetryableError,
 	)
-}
-
-// doFetch は実際の一度のHTTP GETリクエストとHTML解析を実行します。
-func (c *Client) doFetch(url string, ctx context.Context) (*goquery.Document, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("GETリクエスト作成に失敗しました: %w", err)
-	}
-	c.addCommonHeaders(req)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("URL %s へのHTTPリクエストに失敗しました (ネットワーク/接続エラー): %w", url, err)
-	}
-
-	bodyBytes, err := handleResponse(resp)
-	if err != nil {
-		return nil, err
-	}
-
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, fmt.Errorf("HTML解析に失敗しました: %w", err)
-	}
-	return doc, nil
 }
 
 // doPostJSON は実際の一度のHTTP POSTリクエストを実行し、レスポンスボディを返します。
@@ -245,7 +202,7 @@ func handleResponse(resp *http.Response) ([]byte, error) {
 }
 
 // isHTTPRetryableError はエラーがHTTPリトライ対象かどうかを判定します。
-// この関数は retry.ShouldRetryFunc 型のシグネチャを満たします。
+// この関数は go-utils.ShouldRetryFunc 型のシグネチャを満たします。
 func (c *Client) isHTTPRetryableError(err error) bool {
 	if err == nil {
 		return false
