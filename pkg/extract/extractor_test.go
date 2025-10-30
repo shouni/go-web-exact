@@ -102,7 +102,7 @@ func TestFetchAndExtractText(t *testing.T) {
 			html: `<html><head><title>Code Table</title></head><body><div id="content">
     				<table><caption>Data Table</caption><tr><th>Col1</th><td>Val1</td></tr></table>
     				<pre>
-    func hello() {}
+					    func hello() {}
     				</pre>
     			</div></body></html>`,
 			// 修正点:

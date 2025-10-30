@@ -23,12 +23,10 @@ type MockHTTPClient struct {
 
 func (m *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	args := m.Called(req)
-	// エラーは常に args.Error(1) から取得
-	err := args.Error(1)
+	err := args.Error(1) // エラーは常に取得
 
 	// レスポンスが存在する場合のみ型アサーションを行う
 	if args.Get(0) != nil {
-		// MockHTTPClient は Doer を満たし、内部の client.Client の httpClient フィールドは Doer 型
 		return args.Get(0).(*http.Response), err
 	}
 	return nil, err

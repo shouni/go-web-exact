@@ -16,7 +16,7 @@ import (
 
 const (
 	// DefaultHTTPTimeout は、デフォルトのHTTPタイムアウトです。
-	DefaultHTTPTimeout = 5 * time.Second
+	DefaultHTTPTimeout = 10 * time.Second
 	// MaxResponseBodySize は、あらゆるHTTPレスポンスボディの最大読み込みサイズです。
 	MaxResponseBodySize = int64(25 * 1024 * 1024) // 25MB
 	// UserAgent は、サイトからのブロックを避けるためのUser-Agentです。
@@ -60,7 +60,7 @@ func (e *NonRetryableHTTPError) Error() string {
 // ClientOption はClientの設定を行うための関数型です。
 type ClientOption func(*Client)
 
-// WithHTTPClient はカスタムのDoer（旧HTTPClient）を設定します。（変更）
+// WithHTTPClient はカスタムのDoerを設定します。
 func WithHTTPClient(client Doer) ClientOption {
 	return func(c *Client) {
 		c.httpClient = client
@@ -259,7 +259,7 @@ func (c *Client) isHTTPRetryableError(err error) bool {
 }
 
 // HandleLimitedResponse は、指定されたレスポンスボディを、最大サイズに制限して読み込みます。
-// Notifier パッケージから client.HandleLimitedResponse(resp, limit) として呼び出されます。
+// この関数は、主に内部的なレスポンス処理やテストのために使用されます。
 func HandleLimitedResponse(resp *http.Response, limit int64) ([]byte, error) {
 	defer resp.Body.Close()
 	limitedReader := io.LimitReader(resp.Body, limit)

@@ -46,8 +46,8 @@ import (
     "context"
     "time"
 
-    "[github.com/shouni/go-web-exact/pkg/client](https://github.com/shouni/go-web-exact/pkg/client)"  // HTTPクライアントパッケージ
-    "[github.com/shouni/go-web-exact/pkg/extract](https://github.com/shouni/go-web-exact/pkg/extract)" // Web抽出ロジックパッケージ
+    "github.com/shouni/go-web-exact/v2/pkg/client"  // HTTPクライアントパッケージ
+    "github.com/shouni/go-web-exact/v2/pkg/extract" // Web抽出ロジックパッケージ
 )
 ````
 
@@ -64,12 +64,12 @@ import (
     "log"
     "time"
 
-    "[github.com/shouni/go-web-exact/pkg/client](https://github.com/shouni/go-web-exact/pkg/client)"
-    "[github.com/shouni/go-web-exact/pkg/extract](https://github.com/shouni/go-web-exact/pkg/extract)"
+    "github.com/shouni/go-web-exact/v2/pkg/client"  // HTTPクライアントパッケージ
+	"github.com/shouni/go-web-exact/v2/pkg/extract" // Web抽出ロジックパッケージ
 )
 
 func main() {
-    url := "[https://blog.golang.org/gofmt](https://blog.golang.org/gofmt)"
+    url := "https://blog.golang.org/gofmt]"
     
     // 1. HTTPクライアント (Fetcher) を設定
     clientTimeout := 30 * time.Second 
