@@ -69,7 +69,7 @@ import (
 )
 
 func main() {
-    url := "https://blog.golang.org/gofmt]"
+    url := "https://blog.golang.org/gofmt"
     
     // 1. HTTPクライアント (Fetcher) を設定
     clientTimeout := 30 * time.Second 
