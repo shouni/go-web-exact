@@ -103,6 +103,27 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
+// FetchBytes は指定されたURLからリトライ付きでコンテンツをフェッチし、生のバイト配列として返します。
+// web.Fetcher インターフェースを満たすためのメソッドです。
+func (c *Client) FetchBytes(url string, ctx context.Context) ([]byte, error) {
+	var bodyBytes []byte
+	op := func() error {
+		var fetchErr error
+		bodyBytes, fetchErr = c.doFetchBytes(url, ctx)
+		return fetchErr
+	}
+
+	err := c.doWithRetry(
+		ctx,
+		fmt.Sprintf("URL(%s)のフェッチ", url),
+		op,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return bodyBytes, nil
+}
+
 // PostJSONAndFetchBytes は指定されたデータをJSONとしてPOSTし、レスポンスボディをバイト配列として返します。
 func (c *Client) PostJSONAndFetchBytes(url string, data any, ctx context.Context) ([]byte, error) {
 	requestBody, err := json.Marshal(data)
@@ -151,6 +172,21 @@ func (c *Client) doWithRetry(ctx context.Context, operationName string, op func(
 		op,
 		c.isHTTPRetryableError,
 	)
+}
+
+// doFetchBytes は実際の一度のHTTP GETリクエストを実行し、レスポンスボディを返します。
+func (c *Client) doFetchBytes(url string, ctx context.Context) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("GETリクエスト作成に失敗しました: %w", err)
+	}
+	c.addCommonHeaders(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("URL %s へのHTTPリクエストに失敗しました (ネットワーク/接続エラー): %w", url, err)
+	}
+
+	return handleResponse(resp)
 }
 
 // doPostJSON は実際の一度のHTTP POSTリクエストを実行し、レスポンスボディを返します。
