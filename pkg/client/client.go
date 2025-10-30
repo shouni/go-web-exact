@@ -16,14 +16,14 @@ import (
 
 const (
 	// DefaultHTTPTimeout は、デフォルトのHTTPタイムアウトです。
-	DefaultHTTPTimeout = 30 * time.Second
+	DefaultHTTPTimeout = 5 * time.Second
 	// MaxResponseBodySize は、あらゆるHTTPレスポンスボディの最大読み込みサイズです。
 	MaxResponseBodySize = int64(25 * 1024 * 1024) // 25MB
 	// UserAgent は、サイトからのブロックを避けるためのUser-Agentです。
 	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
 )
 
-// Doer は、*http.Clientと互換性のあるHTTPクライアントのインターフェースを定義します。（変更）
+// Doer は、*http.Clientと互換性のあるHTTPクライアントのインターフェースを定義します。
 type Doer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
@@ -97,14 +97,14 @@ func New(timeout time.Duration, options ...ClientOption) *Client {
 	return client
 }
 
-// Do は Doer インターフェースが持つ Do メソッドを呼び出すラッパーです。（変更）
+// Do は Doer インターフェースが持つ Do メソッドを呼び出すラッパーです。
 // これにより、Client 型が Doer インターフェースを満たします。
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
 // FetchBytes は指定されたURLからリトライ付きでコンテンツをフェッチし、生のバイト配列として返します。
-// web.Fetcher インターフェースを満たすためのメソッドです。
+// extract.Fetcher インターフェースを満たすためのメソッドです。
 func (c *Client) FetchBytes(url string, ctx context.Context) ([]byte, error) {
 	var bodyBytes []byte
 	op := func() error {

@@ -47,7 +47,7 @@ func TestNew(t *testing.T) {
 	t.Run("with HTTP client option", func(t *testing.T) {
 		mockClient := new(MockHTTPClient)
 		client := New(10*time.Second, WithHTTPClient(mockClient))
-		assert.Equal(t, mockClient, client.httpClient) // httpClient は Doer 型
+		assert.Equal(t, mockClient, client.httpClient)
 	})
 }
 
