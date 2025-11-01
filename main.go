@@ -30,6 +30,40 @@ func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallT
 	return text, isBodyExtracted, nil
 }
 
+// ensureScheme は、URLのスキームが存在しない場合に https:// または http:// を補完します。
+// スキームが既に存在する場合は、それが http または https であるかをチェックします。
+func ensureScheme(rawURL string) (string, error) {
+	// 1. まず現在のURLをパース
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("URLのパースエラー: %w", err)
+	}
+
+	// 2. スキームが既に存在する場合のチェック
+	if parsedURL.Scheme != "" {
+		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+			return "", fmt.Errorf("無効なURLスキームです。httpまたはhttpsを指定してください: %s", rawURL)
+		}
+		return rawURL, nil
+	}
+
+	// 3. スキームがない場合、HTTPSを優先的に試す
+	tempURL := "https://" + rawURL
+	// 処理を簡略化するため、再パースが成功し、スキームが認識されればOKとする
+	if _, err := url.Parse(tempURL); err == nil {
+		return tempURL, nil
+	}
+
+	// 4. HTTPSで失敗した場合、HTTPを試す
+	tempURL = "http://" + rawURL
+	if _, err := url.Parse(tempURL); err == nil {
+		return tempURL, nil
+	}
+
+	// 5. どちらのスキーム補完も失敗
+	return "", fmt.Errorf("URLのスキームを補完できませんでした。入力値: %s", rawURL)
+}
+
 // run は、アプリケーションの主要なロジックをカプセル化し、エラーを返します。
 func run() error {
 	const overallTimeout = 60 * time.Second
@@ -43,41 +77,19 @@ func run() error {
 		if err := scanner.Err(); err != nil {
 			return fmt.Errorf("標準入力の読み取りエラー: %w", err)
 		}
-
 		return fmt.Errorf("URLが入力されていません")
 	}
 	rawURL := scanner.Text()
 
-	// 2. URLのバリデーションとスキーム補完
-	parsedURL, err := url.Parse(rawURL)
+	// 2. URLのスキーム補完とバリデーション (ヘルパー関数に分離)
+	rawURL, err := ensureScheme(rawURL)
 	if err != nil {
-		return fmt.Errorf("URLのパースエラー: %w", err)
-	}
-
-	// オプション1: HTTPSを優先的に試す
-	if parsedURL.Scheme == "" {
-		// まずHTTPSを試す
-		tempURL := "https://" + rawURL
-		parsedURL, err = url.Parse(tempURL)
-		if err != nil || (parsedURL.Scheme != "https" && parsedURL.Scheme != "http") {
-			// HTTPSでパース失敗、または不正なスキームの場合、HTTPを試す
-			rawURL = "http://" + rawURL
-			parsedURL, err = url.Parse(rawURL)
-			if err != nil {
-				return fmt.Errorf("URLのパースエラー (スキーム補完後): %w", err)
-			}
-		} else {
-			rawURL = tempURL // HTTPSで成功
-		}
-	}
-	// その後のバリデーションは既存のままでOK
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return fmt.Errorf("無効なURLスキームです。httpまたはhttpsを指定してください: %s", rawURL)
+		return fmt.Errorf("URLスキームの処理エラー: %w", err)
 	}
 	fmt.Printf("入力されたURL: %s\n", rawURL)
 
 	// 3. 依存性の初期化 (DIコンテナの役割)
-	fetcher := httpkit.New(clientTimeout, httpkit.WithMaxRetries(2))
+	fetcher := httpkit.New(clientTimeout, httpkit.WithMaxRetries(5))
 	extractor, err := extract.NewExtractor(fetcher)
 	if err != nil {
 		return fmt.Errorf("Extractorの初期化エラー: %w", err)
