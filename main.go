@@ -1,7 +1,6 @@
 package main
 
 import (
-	// 💡 修正 1: 標準ライブラリをグループ化し、最初に配置
 	"bufio"
 	"context"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 )
 
 // runExtractionPipeline は、Webコンテンツの抽出を実行するメインロジックです。
-// 💡 修正 2: overallTimeout を引数として受け取るように変更
 func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallTimeout time.Duration) (text string, hasBody bool, err error) {
 	// 1. 全体処理のコンテキストを設定
 	ctx, cancel := context.WithTimeout(context.Background(), overallTimeout)
@@ -30,7 +28,9 @@ func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallT
 	return text, hasBody, nil
 }
 
-func main() {
+// run は、アプリケーションの主要なロジックをカプセル化し、エラーを返します。
+// これにより、main関数がエラーハンドリングに専念できます。
+func run() error {
 	const overallTimeout = 60 * time.Second
 	const clientTimeout = 30 * time.Second
 
@@ -40,51 +40,47 @@ func main() {
 
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
-			log.Fatalf("標準入力の読み取りエラー: %v", err)
+			return fmt.Errorf("標準入力の読み取りエラー: %w", err)
 		}
-		log.Fatalf("URLが入力されていません。")
+		return fmt.Errorf("URLが入力されていません")
 	}
 	rawURL := scanner.Text()
 
 	// 2. URLのバリデーションとスキーム補完
 	if rawURL == "" {
-		log.Fatalf("無効なURLが入力されました。")
+		return fmt.Errorf("無効なURLが入力されました")
 	}
 
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		log.Fatalf("URLのパースエラー: %v", err)
+		return fmt.Errorf("URLのパースエラー: %w", err)
 	}
 
 	// スキームがない場合、http:// を補完するロジックを追加
-	// 💡 修正 3: ". " の条件を削除し、スキームが空の場合のみ補完する
 	if parsedURL.Scheme == "" {
 		rawURL = "http://" + rawURL
 		parsedURL, err = url.Parse(rawURL)
 		if err != nil {
-			log.Fatalf("URLのパースエラー (スキーム補完後): %v", err)
+			return fmt.Errorf("URLのパースエラー (スキーム補完後): %w", err)
 		}
 	}
 
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		log.Fatalf("無効なURLスキームです。httpまたはhttpsを指定してください: %s", rawURL)
+		return fmt.Errorf("無効なURLスキームです。httpまたはhttpsを指定してください: %s", rawURL)
 	}
 	fmt.Printf("入力されたURL: %s\n", rawURL)
 
 	// 3. 依存性の初期化 (DIコンテナの役割)
-	// clientTimeout を使用して fetcher を初期化
 	fetcher := httpkit.New(clientTimeout, httpkit.WithMaxRetries(2))
 	extractor, err := extract.NewExtractor(fetcher)
 	if err != nil {
-		log.Fatalf("Extractorの初期化エラー: %v", err)
+		return fmt.Errorf("Extractorの初期化エラー: %w", err)
 	}
 
 	// 4. メインロジックの実行 (ヘルパー関数を呼び出し)
-	// 💡 修正 2: overallTimeout を引数として渡す
 	text, hasBody, err := runExtractionPipeline(rawURL, extractor, overallTimeout)
-
 	if err != nil {
-		log.Fatalf("処理中にエラーが発生しました: %v", err)
+		return err // runExtractionPipelineのエラーをそのまま返す
 	}
 
 	// 5. 結果の出力
@@ -94,5 +90,15 @@ func main() {
 		fmt.Println("--- 抽出された本文 ---")
 		fmt.Println(text)
 		fmt.Println("-----------------------")
+	}
+
+	return nil
+}
+
+// main 関数は、run 関数を実行し、エラーが発生した場合は log.Fatalf でアプリケーションを終了させます。
+func main() {
+	if err := run(); err != nil {
+		// エラーハンドリングを一元化
+		log.Fatalf("アプリケーションエラー: %v", err)
 	}
 }
