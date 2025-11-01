@@ -11,8 +11,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/shouni/go-http-kit v1.0.2 h1:9py4M3EPBE2FnYLhnoAmdcLKGsR687y7TYutQ6bAiME=
 github.com/shouni/go-http-kit v1.0.2/go.mod h1:ht5tew+VUo/vBnOoNuQIXHGs3+0NCXhx7fLfEw0FEwc=
-github.com/shouni/go-utils v1.0.2 h1:dZlUgEdW5J6xkD4WHo1+1Hb4PYvFEN4DbDLGuPijfpE=
-github.com/shouni/go-utils v1.0.2/go.mod h1:lR2yRm9jbmGcWdvax/y72Yek9k9iF9nDzBzfyyhSbTw=
+github.com/shouni/go-utils v1.0.3 h1:vH9gJvgdH9Og6lILPw++fzO3igC0zUTUI7fRL4dVxrM=
+github.com/shouni/go-utils v1.0.3/go.mod h1:dQxOuVTvWFHWEH/G6izteLh+tubkI5Sl1jpDWlCSkBU=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
