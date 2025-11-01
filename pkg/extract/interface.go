@@ -13,8 +13,3 @@ import (
 type Fetcher interface {
 	FetchBytes(url string, ctx context.Context) ([]byte, error)
 }
-
-// Extractor は、Fetcher を使ってコンテンツ抽出プロセスを管理します。
-type Extractor struct {
-	fetcher Fetcher
-}

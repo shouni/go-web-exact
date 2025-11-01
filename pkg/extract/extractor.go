@@ -26,6 +26,11 @@ const (
 	tableCaptionPrefix = "【表題】 "
 )
 
+// Extractor は、Fetcher を使ってコンテンツ抽出プロセスを管理します。
+type Extractor struct {
+	fetcher Fetcher
+}
+
 // NewExtractor は、新しいExtractorのインスタンスを生成します。
 func NewExtractor(fetcher Fetcher) (*Extractor, error) {
 	if fetcher == nil {
