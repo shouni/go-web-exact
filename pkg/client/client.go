@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -80,18 +79,12 @@ func New(timeout time.Duration, options ...ClientOption) *Client {
 // FetchBytes は URL からコンテンツをフェッチし、生のバイト配列として返します。
 // リトライロジックは httpkit.Client が処理します。
 func (c *Client) FetchBytes(url string, ctx context.Context) ([]byte, error) {
-	if c.Client == nil {
-		return nil, errors.New("内部 httpkit.Client が初期化されていません")
-	}
 	return c.Client.FetchBytes(url, ctx)
 }
 
 // PostJSONAndFetchBytes は指定されたデータをJSONとしてPOSTし、レスポンスボディをバイト配列として返します。
 // リトライロジックは httpkit.Client が処理します。
 func (c *Client) PostJSONAndFetchBytes(url string, data any, ctx context.Context) ([]byte, error) {
-	if c.Client == nil {
-		return nil, errors.New("内部 httpkit.Client が初期化されていません")
-	}
 	return c.Client.PostJSONAndFetchBytes(url, data, ctx)
 }
 
