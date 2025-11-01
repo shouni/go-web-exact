@@ -1,6 +1,7 @@
 package main
 
 import (
+	// 標準ライブラリ
 	"bufio"
 	"context"
 	"fmt"
@@ -14,22 +15,22 @@ import (
 )
 
 // runExtractionPipeline は、Webコンテンツの抽出を実行するメインロジックです。
-func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallTimeout time.Duration) (text string, hasBody bool, err error) {
+// Goの慣習に従い、エラーを最後の戻り値にします。
+func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallTimeout time.Duration) (text string, isBodyExtracted bool, err error) {
 	// 1. 全体処理のコンテキストを設定
 	ctx, cancel := context.WithTimeout(context.Background(), overallTimeout)
 	defer cancel()
 
 	// 2. 抽出の実行
-	text, hasBody, err = extractor.FetchAndExtractText(rawURL, ctx)
+	text, isBodyExtracted, err = extractor.FetchAndExtractText(rawURL, ctx)
 	if err != nil {
 		return "", false, fmt.Errorf("コンテンツ抽出エラー: %w", err)
 	}
 
-	return text, hasBody, nil
+	return text, isBodyExtracted, nil
 }
 
 // run は、アプリケーションの主要なロジックをカプセル化し、エラーを返します。
-// これにより、main関数がエラーハンドリングに専念できます。
 func run() error {
 	const overallTimeout = 60 * time.Second
 	const clientTimeout = 30 * time.Second
@@ -42,15 +43,12 @@ func run() error {
 		if err := scanner.Err(); err != nil {
 			return fmt.Errorf("標準入力の読み取りエラー: %w", err)
 		}
+
 		return fmt.Errorf("URLが入力されていません")
 	}
 	rawURL := scanner.Text()
 
 	// 2. URLのバリデーションとスキーム補完
-	if rawURL == "" {
-		return fmt.Errorf("無効なURLが入力されました")
-	}
-
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("URLのパースエラー: %w", err)
@@ -78,13 +76,13 @@ func run() error {
 	}
 
 	// 4. メインロジックの実行 (ヘルパー関数を呼び出し)
-	text, hasBody, err := runExtractionPipeline(rawURL, extractor, overallTimeout)
+	text, isBodyExtracted, err := runExtractionPipeline(rawURL, extractor, overallTimeout)
 	if err != nil {
 		return err // runExtractionPipelineのエラーをそのまま返す
 	}
 
 	// 5. 結果の出力
-	if !hasBody {
+	if !isBodyExtracted {
 		fmt.Printf("本文は見つかりませんでしたが、タイトルを取得しました:\n%s\n", text)
 	} else {
 		fmt.Println("--- 抽出された本文 ---")
