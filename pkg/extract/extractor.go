@@ -7,17 +7,8 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	textUtils "github.com/shouni/go-utils/text"
 )
-
-// ----------------------------------------------------------------------
-// 依存性の定義 (DIP)
-// ----------------------------------------------------------------------
-
-// Fetcher は、HTMLドキュメントの生バイト配列を取得する機能のインターフェースを定義します。
-// Extractor は、この抽象に依存します。
-type Fetcher interface {
-	FetchBytes(url string, ctx context.Context) ([]byte, error)
-}
 
 // Extractor は、Fetcher を使ってコンテンツ抽出プロセスを管理します。
 type Extractor struct {
@@ -49,17 +40,6 @@ const (
 	titlePrefix        = "【記事タイトル】 "
 	tableCaptionPrefix = "【表題】 "
 )
-
-// ----------------------------------------------------------------------
-// ヘルパー関数
-// ----------------------------------------------------------------------
-
-func normalizeText(text string) string {
-	text = strings.ReplaceAll(text, "\n", " ")
-	text = strings.ReplaceAll(text, "\t", " ")
-	text = strings.Join(strings.Fields(text), " ")
-	return strings.TrimSpace(text)
-}
 
 // ----------------------------------------------------------------------
 // メイン関数 (メソッド化)
@@ -133,7 +113,7 @@ func (e *Extractor) findMainContent(doc *goquery.Document) *goquery.Selection {
 // processGeneralElement は生成する
 func (e *Extractor) processGeneralElement(s *goquery.Selection) string {
 	text := s.Text()
-	text = normalizeText(text)
+	text = textUtils.NormalizeText(text)
 	isHeading := s.Is("h1, h2, h3, h4, h5, h6")
 	isListItem := s.Is("li")
 	if text == "" {
@@ -161,7 +141,7 @@ func processTable(s *goquery.Selection) string { // パッケージレベル関�
 	s.Find("tr").Each(func(rowIndex int, row *goquery.Selection) {
 		var rowTexts []string
 		row.Find("th, td").Each(func(cellIndex int, cell *goquery.Selection) {
-			rowTexts = append(rowTexts, normalizeText(cell.Text()))
+			rowTexts = append(rowTexts, textUtils.NormalizeText(cell.Text()))
 		})
 		tableContent = append(tableContent, strings.Join(rowTexts, " | "))
 	})

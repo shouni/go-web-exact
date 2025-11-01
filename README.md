@@ -32,11 +32,11 @@
 `go-web-exact` は、以下の **`Fetcher`** インターフェースに依存します。
 
 ```go
-// pkg/extract/interface.go (このライブラリ内で定義)
+package extract
 
 // Fetcher は、指定されたURLからリトライ付きでコンテンツを取得するクライアントインターフェースです。
 type Fetcher interface {
-	FetchBytes(url string, ctx context.Context) ([]byte, error)
+    FetchBytes(url string, ctx context.Context) ([]byte, error)
 }
 ````
 
@@ -53,41 +53,41 @@ import (
     "log"
     "time"
 
-	"github.com/shouni/go-web-exact/v2/pkg/client"
-	"github.com/shouni/go-web-exact/v2/pkg/extract"
+	"github.com/shouni/go-http-kit/pkg/httpkit" 
+    "github.com/shouni/go-web-exact/v2/pkg/extract"
 )
 
 // main関数の例
 func main() {
-	url := "https://github.com/shouni/go-web-exact"
+    url := "https://github.com/shouni/go-web-exact"
 
-	// 1. 外部の Fetcher 実装を初期化 (httpkitを利用)
-	// httpkit.Client は extract.Fetcher インターフェースを満たします
-	clientTimeout := 30 * time.Second
-	fetcher := client.New(clientTimeout, client.WithMaxRetries(5))
+    // 1. 外部の Fetcher 実装を初期化 (go-http-kitを利用)
+    // httpkit.Client は extract.Fetcher インターフェースを満たします
+    clientTimeout := 30 * time.Second
+    fetcher := httpkit.New(clientTimeout, httpkit.WithMaxRetries(5))
 
-	// 2. Extractor を初期化 (FetcherをDI)
-	extractor, err := extract.NewExtractor(fetcher)
+    // 2. Extractor を初期化 (FetcherをDI)
+    extractor, err := extract.NewExtractor(fetcher)
 
-	// 3. 全体処理のコンテキストを設定
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+    // 3. 全体処理のコンテキストを設定
+    ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+    defer cancel()
 
-	// 4. 抽出の実行
-	text, hasBody, err := extractor.FetchAndExtractText(url, ctx)
+    // 4. 抽出の実行
+    text, hasBody, err := extractor.FetchAndExtractText(url, ctx)
 
-	if err != nil {
-		// エラー処理 (httpkitのエラー型に基づく)
-		log.Fatalf("抽出エラー: %v", err)
-	}
+    if err != nil {
+       // エラー処理 
+       log.Fatalf("抽出エラー: %v", err)
+    }
 
-	if !hasBody {
-		fmt.Printf("本文は見つかりませんでしたが、タイトルを取得しました:\n%s\n", text)
-	} else {
-		fmt.Println("--- 抽出された本文 ---")
-		fmt.Println(text)
-		fmt.Println("-----------------------")
-	}
+    if !hasBody {
+       fmt.Printf("本文は見つかりませんでしたが、タイトルを取得しました:\n%s\n", text)
+    } else {
+       fmt.Println("--- 抽出された本文 ---")
+       fmt.Println(text)
+       fmt.Println("-----------------------")
+    }
 }
 ```
 
@@ -101,7 +101,6 @@ func main() {
 | :--- | :--- | :--- |
 | **`pkg/extract`** | **`extract`** | HTMLの解析 (`goquery`)、メインコンテンツの特定、ノイズ除去、テキスト整形ロジック。 |
 | **`pkg/extract/interface.go`** | **`extract`** | 外部依存となる **`Fetcher`** インターフェースの定義。 |
-| **（削除）** | **`client`** | リトライロジック、HTTP処理は **`go-http-kit`** に分離されました。 |
 
 ### 外部依存パッケージ
 
