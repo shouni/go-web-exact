@@ -78,7 +78,8 @@ func run() error {
 	// 4. メインロジックの実行 (ヘルパー関数を呼び出し)
 	text, isBodyExtracted, err := runExtractionPipeline(rawURL, extractor, overallTimeout)
 	if err != nil {
-		return err // runExtractionPipelineのエラーをそのまま返す
+		// runExtractionPipelineのエラーを、run関数内で発生したエラーとしてラップ
+		return fmt.Errorf("コンテンツ抽出パイプラインの実行エラー: %w", err)
 	}
 
 	// 5. 結果の出力
