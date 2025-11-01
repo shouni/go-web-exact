@@ -53,41 +53,41 @@ import (
     "log"
     "time"
 
-    "github.com/shouni/go-web-exact/v2/pkg/extract"
-    "github.com/shouni/go-http-kit/pkg/httpkit" 
+	"github.com/shouni/go-web-exact/v2/pkg/client"
+	"github.com/shouni/go-web-exact/v2/pkg/extract"
 )
 
 // main関数の例
 func main() {
-    url := "[https://blog.golang.org/gofmt](https://blog.golang.org/gofmt)"
-    
-    // 1. 外部の Fetcher 実装を初期化 (httpkitを利用)
-    // httpkit.Client は extract.Fetcher インターフェースを満たします
-    clientTimeout := 30 * time.Second
-    fetcher := httpkit.New(clientTimeout, httpkit.WithMaxRetries(5)) 
-    
-    // 2. Extractor を初期化 (FetcherをDI)
-    extractor := extract.NewExtractor(fetcher) 
+	url := "https://github.com/shouni/go-web-exact"
 
-    // 3. 全体処理のコンテキストを設定
-    ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-    defer cancel()
-    
-    // 4. 抽出の実行
-    text, hasBody, err := extractor.FetchAndExtractText(url, ctx)
-    
-    if err != nil {
-       // エラー処理 (httpkitのエラー型に基づく)
-       log.Fatalf("抽出エラー: %v", err)
-    }
+	// 1. 外部の Fetcher 実装を初期化 (httpkitを利用)
+	// httpkit.Client は extract.Fetcher インターフェースを満たします
+	clientTimeout := 30 * time.Second
+	fetcher := client.New(clientTimeout, client.WithMaxRetries(5))
 
-    if !hasBody {
-       fmt.Printf("本文は見つかりませんでしたが、タイトルを取得しました:\n%s\n", text)
-    } else {
-       fmt.Println("--- 抽出された本文 ---")
-       fmt.Println(text)
-       fmt.Println("-----------------------")
-    }
+	// 2. Extractor を初期化 (FetcherをDI)
+	extractor, err := extract.NewExtractor(fetcher)
+
+	// 3. 全体処理のコンテキストを設定
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// 4. 抽出の実行
+	text, hasBody, err := extractor.FetchAndExtractText(url, ctx)
+
+	if err != nil {
+		// エラー処理 (httpkitのエラー型に基づく)
+		log.Fatalf("抽出エラー: %v", err)
+	}
+
+	if !hasBody {
+		fmt.Printf("本文は見つかりませんでしたが、タイトルを取得しました:\n%s\n", text)
+	} else {
+		fmt.Println("--- 抽出された本文 ---")
+		fmt.Println(text)
+		fmt.Println("-----------------------")
+	}
 }
 ```
 
