@@ -1,273 +1,96 @@
-package client // パッケージ名を client に変更
+package client
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/shouni/go-utils/retry"
+	"github.com/shouni/go-http-kit/pkg/httpkit"
 )
 
-const (
-	// DefaultHTTPTimeout は、デフォルトのHTTPタイムアウトです。
-	DefaultHTTPTimeout = 10 * time.Second
-	// MaxResponseBodySize は、あらゆるHTTPレスポンスボディの最大読み込みサイズです。
-	MaxResponseBodySize = int64(25 * 1024 * 1024) // 25MB
-	// UserAgent は、サイトからのブロックを避けるためのUser-Agentです。
-	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
-)
+// ----------------------------------------------------------------------
+// 定数とインターフェース
+// ----------------------------------------------------------------------
 
-// Doer は、*http.Clientと互換性のあるHTTPクライアントのインターフェースを定義します。
+// Doer は、標準の *http.Client.Do()と互換性のあるHTTPクライアントのインターフェースを定義します。
 type Doer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// Client はHTTPリクエストと指数バックオフを用いたリトライロジックを管理します。
+// Client は httpkit.Client をラップし、リトライロジックをカプセル化します。
+// httpkit.Client を埋め込むことで、Doer, Fetcher, Poster などのインターフェースを自動的に満たします。
 type Client struct {
-	httpClient  Doer // HTTPClient から Doer に変更
-	retryConfig retry.Config
+	*httpkit.Client // httpkit.Client を埋め込み、そのすべてのメソッドを継承
 }
 
-// NonRetryableHTTPError はHTTP 4xx系のステータスコードエラーを示すカスタムエラー型です。
-type NonRetryableHTTPError struct {
-	StatusCode int
-	Body       []byte
-}
-
-// Error は NonRetryableHTTPError のエラーメッセージを返します。
-func (e *NonRetryableHTTPError) Error() string {
-	if len(e.Body) > 0 {
-		const maxBodyDisplaySize = 1024 // 例: 1KBまで表示
-		displayBody := strings.TrimSpace(string(e.Body))
-		if len(displayBody) > maxBodyDisplaySize {
-			// UTF-8セーフな切り詰め
-			runes := []rune(displayBody)
-			if len(runes) > maxBodyDisplaySize {
-				displayBody = string(runes[:maxBodyDisplaySize]) + "..."
-			}
-		}
-		return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディ: %s", e.StatusCode, displayBody)
-	}
-	return fmt.Sprintf("HTTPクライアントエラー (非リトライ対象): ステータスコード %d, ボディなし", e.StatusCode)
-}
+// ----------------------------------------------------------------------
+// 設定とコンストラクタ
+// ----------------------------------------------------------------------
 
 // ClientOption はClientの設定を行うための関数型です。
+// 内部の httpkit.Client のオプションを適用するためのラッパーです。
 type ClientOption func(*Client)
 
 // WithHTTPClient はカスタムのDoerを設定します。
-func WithHTTPClient(client Doer) ClientOption {
+// 内部の httpkit.Client にカスタムDoerを設定します。
+func WithHTTPClient(doer Doer) ClientOption {
 	return func(c *Client) {
-		c.httpClient = client
+		// 埋め込み型の httpkit.Client のオプションを呼び出す
+		httpkit.WithHTTPClient(doer)(c.Client)
 	}
 }
 
 // WithMaxRetries は最大リトライ回数を設定します。
+// 内部の httpkit.Client のリトライ設定を更新します。
 func WithMaxRetries(max uint64) ClientOption {
 	return func(c *Client) {
-		c.retryConfig.MaxRetries = max
+		httpkit.WithMaxRetries(max)(c.Client)
 	}
 }
 
 // New は新しいClientを初期化します。
-// optionsはオプションの設定を受け取ります。
+// 内部で httpkit.New を呼び出し、設定オプションを適用します。
 func New(timeout time.Duration, options ...ClientOption) *Client {
-	if timeout <= 0 {
-		timeout = DefaultHTTPTimeout
+	// 1. httpkit.Client を初期化
+	// timeout は内部の http.Client の Timeout に使用されます。
+	kitClient := httpkit.New(timeout)
+
+	c := &Client{
+		Client: kitClient,
 	}
 
-	// go-utils のデフォルト設定を利用する
-	retryCfg := retry.DefaultConfig()
-	client := &Client{
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
-		retryConfig: retryCfg,
-	}
-
+	// 2. ClientOption を c.Client (つまり httpkit.Client) に適用
 	for _, opt := range options {
-		opt(client)
+		opt(c)
 	}
 
-	return client
+	return c
 }
 
-// Do は Doer インターフェースが持つ Do メソッドを呼び出すラッパーです。
-// これにより、Client 型が Doer インターフェースを満たします。
-func (c *Client) Do(req *http.Request) (*http.Response, error) {
-	return c.httpClient.Do(req)
-}
+// ----------------------------------------------------------------------
+// httpkit メソッドの利用
+// ----------------------------------------------------------------------
 
-// FetchBytes は指定されたURLからリトライ付きでコンテンツをフェッチし、生のバイト配列として返します。
-// extract.Fetcher インターフェースを満たすためのメソッドです。
+// FetchBytes は URL からコンテンツをフェッチし、生のバイト配列として返します。
+// リトライロジックは httpkit.Client が処理します。
 func (c *Client) FetchBytes(url string, ctx context.Context) ([]byte, error) {
-	var bodyBytes []byte
-	op := func() error {
-		var fetchErr error
-		bodyBytes, fetchErr = c.doFetchBytes(url, ctx)
-		return fetchErr
-	}
-
-	err := c.doWithRetry(
-		ctx,
-		fmt.Sprintf("URL(%s)のフェッチ", url),
-		op,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return bodyBytes, nil
+	return c.Client.FetchBytes(url, ctx)
 }
 
 // PostJSONAndFetchBytes は指定されたデータをJSONとしてPOSTし、レスポンスボディをバイト配列として返します。
+// リトライロジックは httpkit.Client が処理します。
 func (c *Client) PostJSONAndFetchBytes(url string, data any, ctx context.Context) ([]byte, error) {
-	requestBody, err := json.Marshal(data)
-	if err != nil {
-		return nil, fmt.Errorf("JSONデータのシリアライズに失敗しました: %w", err)
-	}
-	var bodyBytes []byte
-
-	op := func() error {
-		var postErr error
-		bodyBytes, postErr = c.doPostJSON(url, requestBody, ctx)
-		return postErr // エラーが発生した場合はそのまま返す
-	}
-
-	err = c.doWithRetry(
-		ctx,
-		fmt.Sprintf("URL(%s)へのPOSTリクエスト", url),
-		op,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return bodyBytes, nil
+	return c.Client.PostJSONAndFetchBytes(url, data, ctx)
 }
 
 // IsNonRetryableError は与えられたエラーが非リトライ対象のHTTPエラーであるかを判断します。
+// httpkit の同名関数を呼び出します。
 func IsNonRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-	var nonRetryable *NonRetryableHTTPError
-	return errors.As(err, &nonRetryable)
-}
-
-// addCommonHeaders は共通のHTTPヘッダーを設定します。
-func (c *Client) addCommonHeaders(req *http.Request) {
-	req.Header.Set("User-Agent", UserAgent)
-}
-
-// doWithRetry は リトライロジックを実行します。
-func (c *Client) doWithRetry(ctx context.Context, operationName string, op func() error) error {
-	return retry.Do(
-		ctx,
-		c.retryConfig,
-		operationName,
-		op,
-		c.isHTTPRetryableError,
-	)
-}
-
-// doFetchBytes は実際の一度のHTTP GETリクエストを実行し、レスポンスボディを返します。
-func (c *Client) doFetchBytes(url string, ctx context.Context) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		// HTTPリクエスト作成時のエラーであることを明確にする
-		return nil, fmt.Errorf("HTTP GETリクエストの作成に失敗しました (URL: %s): %w", url, err)
-	}
-
-	c.addCommonHeaders(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("URL %s へのHTTPリクエストに失敗しました (ネットワーク/接続エラー): %w", url, err)
-	}
-
-	return handleResponse(resp)
-}
-
-// doPostJSON は実際の一度のHTTP POSTリクエストを実行し、レスポンスボディを返します。
-func (c *Client) doPostJSON(url string, requestBody []byte, ctx context.Context) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(requestBody))
-	if err != nil {
-		return nil, fmt.Errorf("POSTリクエスト作成に失敗しました: %w", err)
-	}
-	c.addCommonHeaders(req)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("URL %s へのHTTP POSTリクエストに失敗しました (ネットワーク/接続エラー): %w", url, err)
-	}
-
-	return handleResponse(resp)
-}
-
-// handleResponse はHTTPレスポンスを処理し、成功した場合はボディをバイト配列として返します。
-// エラーが発生した場合は、ステータスコードに応じてリトライ可能かどうかが判断できるエラーを返します。
-func handleResponse(resp *http.Response) ([]byte, error) {
-	defer resp.Body.Close()
-
-	if resp.ContentLength > 0 && resp.ContentLength > MaxResponseBodySize {
-		return nil, fmt.Errorf("レスポンスボディが最大サイズ (%dバイト) を超えました", MaxResponseBodySize)
-	}
-
-	limitedReader := io.LimitReader(resp.Body, MaxResponseBodySize)
-	bodyBytes, err := io.ReadAll(limitedReader)
-	if err != nil {
-		return nil, fmt.Errorf("レスポンスボディの読み込みに失敗しました: %w", err)
-	}
-
-	// 2xx系は成功
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return bodyBytes, nil
-	}
-
-	// 5xx 系: リトライ対象のサーバーエラー
-	if resp.StatusCode >= 500 && resp.StatusCode <= 599 {
-		return nil, fmt.Errorf("HTTPステータスコードエラー (5xx リトライ対象): %d, 詳細: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
-	}
-
-	// 4xx 系など、その他は非リトライ対象のクライアントエラー
-	return nil, &NonRetryableHTTPError{
-		StatusCode: resp.StatusCode,
-		Body:       bodyBytes,
-	}
-}
-
-// isHTTPRetryableError はエラーがHTTPリトライ対象かどうかを判定します。
-// この関数は go-utils.ShouldRetryFunc 型のシグネチャを満たします。
-func (c *Client) isHTTPRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-	// 1. Contextエラー（タイムアウト/キャンセル）はリトライ対象
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	// 2. 非リトライ対象エラー（4xx）はリトライしない
-	if IsNonRetryableError(err) {
-		return false
-	}
-	// 3. 5xxエラーやネットワークエラー（NonRetryableHTTPErrorでないもの）はすべてリトライ対象
-	return true
+	return httpkit.IsNonRetryableError(err)
 }
 
 // HandleLimitedResponse は、指定されたレスポンスボディを、最大サイズに制限して読み込みます。
-// この関数は、主に内部的なレスポンス処理やテストのために使用されます。
+// httpkit の同名関数を呼び出します。
 func HandleLimitedResponse(resp *http.Response, limit int64) ([]byte, error) {
-	defer resp.Body.Close()
-	limitedReader := io.LimitReader(resp.Body, limit)
-	bodyBytes, err := io.ReadAll(limitedReader)
-	if err != nil {
-		// ボディ読み込み自体が失敗した場合
-		return nil, fmt.Errorf("レスポンスボディの読み込みに失敗しました: %w", err)
-	}
-	// 成功またはボディ読み込みが部分的に成功したバイト列を返す
-	return bodyBytes, nil
+	return httpkit.HandleLimitedResponse(resp, limit)
 }

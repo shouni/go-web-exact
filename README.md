@@ -7,53 +7,42 @@
 
 ## 🚀 特徴
 
-* **高精度なコンテンツ抽出:** 独自のセレクタとヒューリスティックを用いて、ナビゲーション、広告、コメントなどのノイズを排除し、メインの記事本文を特定します。
+このライブラリは、Webコンテンツの取得を外部の **`Fetcher` インターフェース**に依存し、HTMLドキュメントからの**高精度なメインコンテンツ抽出**に特化しています。
 
-* **メモリ安全なリクエスト制限:** レスポンスボディの最大読み込みサイズを**25MB**に制限することで、予期せぬ巨大ファイルによる**メモリ枯渇**（OOM）を防ぎます。
+* **高精度なコンテンツ抽出:** 独自のセレクタとヒューリスティックを用いて、ナビゲーション、広告、コメントなどの**ノイズを排除**し、メインの記事本文を特定します。
 
-* **堅牢なリトライメカニズム (Exponential Backoff):**
-  リトライロジックは **`pkg/client` パッケージに統合**され、HTTPリクエストの堅牢性を高めています。`backoff/v4` を用いた**指数バックオフと自動リトライ機能**により、一時的なネットワークエラーやサーバーエラーに自動で対応します。
+* **柔軟な依存関係 (DI):** HTTPリクエストの実行には、外部で定義された **`extract.Fetcher` インターフェース**を依存性注入（DI）により受け取ります。これにより、リトライ、認証、キャッシュなどのロジックをアプリケーション側で自由に実装・選択できます。（例: `go-http-kit` の利用）
 
-### 🔃 デフォルトのリトライ設定（`pkg/client` の定数に基づく）
-
-| 設定項目 | 値 | 概要 |
-| :--- | :--- |:---|
-| **初期間隔** (`InitialBackoffInterval`) | **5秒** | 最初の失敗から次の試行までの待機時間。指数バックオフの開始点です。 |
-| **最大間隔** (`MaxBackoffInterval`) | **30秒** | 指数バックオフにより待機時間が最大となる秒数。サーバーへの過負荷を防ぎます。 |
-| **デフォルト最大試行回数** (`DefaultMaxRetries`) | **3回** | デフォルトでの最大リトライ回数。 |
-| **遅延戦略** | 指数バックオフ (Jitter適用) | 待機時間を指数関数的に増加させ、ランダムな揺らぎを加えることで、リトライの集中を避けます。 |
-
-  **注:** 最大試行回数を含む全ての設定は、**`client.New()` 関数に `client.WithMaxRetries(N)` オプションを渡す**ことで上書き可能です。
-
-* **堅牢なHTTP処理 (GET/POST対応):** `context` を使用したタイムアウト制御に加え、**GETリクエストとJSON POSTリクエスト**の両方をサポートし、不安定なネットワーク環境や一時的なサーバーエラーに対応します。
-
-* **型安全なエラー処理:** HTTP 4xx エラー（クライアントエラー）を非リトライ対象のカスタムエラー型で返し、5xx エラー（サーバーエラー）やネットワークエラーのみをリトライ対象とすることで、リソースの無駄遣いを防ぎます。
+* **ノイズの排除:** 抽出ロジック内で定義された **`noiseSelectors`** を使用して、指定された不要な要素を削除します。
 
 * **テキストの整形:** 抽出されたテキストから不要な改行や連続するスペースを除去し、クリーンな整形済みテキストを返します。
 
 * **テーブルデータの構造化:** HTMLテーブルをパースし、Markdown風の行形式に整形してテキストに含めます。
 
+* **抽出ルールの公開:** 最小段落長（20文字）、最小見出し長（3文字）など、抽出に使用する具体的なルールを公開しています。
+
 -----
 
 ## 📦 ライブラリ利用方法
 
-主要な機能は **`pkg/client`** と **`pkg/extract`** パッケージとして提供されます。これらは**依存性注入 (DI)** の原則に従って設計されています。
+主要な機能は **`pkg/extract`** パッケージとして提供されます。外部のHTTPクライアントは **`extract.Fetcher`** インターフェースを満たす必要があります。
 
-### 1\. インポート
+### 1\. インターフェース定義 (Fetcher)
+
+`go-web-exact` は、以下の **`Fetcher`** インターフェースに依存します。
 
 ```go
-import (
-    "context"
-    "time"
+// pkg/extract/interface.go (このライブラリ内で定義)
 
-    "github.com/shouni/go-web-exact/v2/pkg/client"  // HTTPクライアントパッケージ
-    "github.com/shouni/go-web-exact/v2/pkg/extract" // Web抽出ロジックパッケージ
-)
+// Fetcher は、指定されたURLからリトライ付きでコンテンツを取得するクライアントインターフェースです。
+type Fetcher interface {
+	FetchBytes(url string, ctx context.Context) ([]byte, error)
+}
 ````
 
 ### 2\. コンテンツの抽出 (`extract.Extractor` の利用)
 
-`extract.Extractor` は `client.Client` を依存性として受け取ります。
+`extract.Extractor` は `Fetcher` 実装（例: `go-http-kit` で実装されたクライアント）を依存性として受け取ります。
 
 ```go
 package main
@@ -64,31 +53,31 @@ import (
     "log"
     "time"
 
-    "github.com/shouni/go-web-exact/v2/pkg/client"  // HTTPクライアントパッケージ
-	"github.com/shouni/go-web-exact/v2/pkg/extract" // Web抽出ロジックパッケージ
+    "github.com/shouni/go-web-exact/v2/pkg/extract"
+    "github.com/shouni/go-http-kit/pkg/httpkit" 
 )
 
+// main関数の例
 func main() {
-    url := "https://blog.golang.org/gofmt"
+    url := "[https://blog.golang.org/gofmt](https://blog.golang.org/gofmt)"
     
-    // 1. HTTPクライアント (Fetcher) を設定
-    clientTimeout := 30 * time.Second 
+    // 1. 外部の Fetcher 実装を初期化 (httpkitを利用)
+    // httpkit.Client は extract.Fetcher インターフェースを満たします
+    clientTimeout := 30 * time.Second
+    fetcher := httpkit.New(clientTimeout, httpkit.WithMaxRetries(5)) 
     
-    // 2. Clientを初期化 (最大5回リトライ設定)
-    fetcher := client.New(clientTimeout, client.WithMaxRetries(5)) 
-    
-    // 3. Extractor を初期化 (DI)
-    extractor := extract.NewExtractor(fetcher) // extract.NewExtractor に変更
+    // 2. Extractor を初期化 (FetcherをDI)
+    extractor := extract.NewExtractor(fetcher) 
 
-    // 4. 全体処理のコンテキストを設定（例：全体で60秒のタイムアウト）
+    // 3. 全体処理のコンテキストを設定
     ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
     defer cancel()
     
-    // 5. 抽出の実行
+    // 4. 抽出の実行
     text, hasBody, err := extractor.FetchAndExtractText(url, ctx)
     
     if err != nil {
-       // 非リトライ対象エラーかどうか client.IsNonRetryableError(err) で判定可能
+       // エラー処理 (httpkitのエラー型に基づく)
        log.Fatalf("抽出エラー: %v", err)
     }
 
@@ -110,12 +99,22 @@ func main() {
 
 | ディレクトリ | パッケージ名 | 役割 |
 | :--- | :--- | :--- |
-| **`pkg/client`** | **`client`** | HTTPリクエストの実行、カスタムエラー（`NonRetryableHTTPError`）の定義。**リトライロジックもこのパッケージに統合**されています。**`Client` 構造体は `Doer` インターフェースを満たします。** |
 | **`pkg/extract`** | **`extract`** | HTMLの解析 (`goquery`)、メインコンテンツの特定、ノイズ除去、テキスト整形ロジック。 |
+| **`pkg/extract/interface.go`** | **`extract`** | 外部依存となる **`Fetcher`** インターフェースの定義。 |
+| **（削除）** | **`client`** | リトライロジック、HTTP処理は **`go-http-kit`** に分離されました。 |
+
+### 外部依存パッケージ
+
+本プロジェクトは、以下の主要な外部パッケージに依存しています。
+
+* **`github.com/antchfx/htmlquery`**: HTMLドキュメントの操作。
+* **`github.com/PuerkitoBio/goquery`**: jQueryライクな構文でのHTML要素検索。
+* **`golang.org/x/net/html`**: 標準ライブラリによるHTMLパース。
 
 -----
 
 ### 📜 ライセンス (License)
 
 このプロジェクトは [MIT License](https://opensource.org/licenses/MIT) の下で公開されています。
+
 
