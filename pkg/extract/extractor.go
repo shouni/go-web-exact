@@ -10,6 +10,21 @@ import (
 	textUtils "github.com/shouni/go-utils/text"
 )
 
+// Extractor は、Fetcher を使ってコンテンツ抽出プロセスを管理します。
+type Extractor struct {
+	fetcher Fetcher
+}
+
+// NewExtractor は、新しいExtractorのインスタンスを生成します。
+func NewExtractor(fetcher Fetcher) (*Extractor, error) {
+	if fetcher == nil {
+		return nil, fmt.Errorf("extract.NewExtractor: Fetcher cannot be nil")
+	}
+	return &Extractor{
+		fetcher: fetcher,
+	}, nil
+}
+
 // ----------------------------------------------------------------------
 // 定数定義 (解析関連のみ)
 // ----------------------------------------------------------------------
@@ -25,21 +40,6 @@ const (
 	titlePrefix        = "【記事タイトル】 "
 	tableCaptionPrefix = "【表題】 "
 )
-
-// Extractor は、Fetcher を使ってコンテンツ抽出プロセスを管理します。
-type Extractor struct {
-	fetcher Fetcher
-}
-
-// NewExtractor は、新しいExtractorのインスタンスを生成します。
-func NewExtractor(fetcher Fetcher) (*Extractor, error) {
-	if fetcher == nil {
-		return nil, fmt.Errorf("extract.NewExtractor: Fetcher cannot be nil")
-	}
-	return &Extractor{
-		fetcher: fetcher,
-	}, nil
-}
 
 // ----------------------------------------------------------------------
 // メイン関数 (メソッド化)
