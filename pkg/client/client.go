@@ -12,11 +12,6 @@ import (
 // 定数とインターフェース
 // ----------------------------------------------------------------------
 
-const (
-	// DefaultHTTPTimeout は、デフォルトのHTTPタイムアウトです。
-	DefaultHTTPTimeout = 10 * time.Second
-)
-
 // Doer は、標準の *http.Client.Do()と互換性のあるHTTPクライアントのインターフェースを定義します。
 type Doer interface {
 	Do(req *http.Request) (*http.Response, error)
