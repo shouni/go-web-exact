@@ -48,20 +48,8 @@ func ensureScheme(rawURL string) (string, error) {
 	}
 
 	// 3. スキームがない場合、HTTPSを優先的に試す
-	tempURL := "https://" + rawURL
-	// 処理を簡略化するため、再パースが成功し、スキームが認識されればOKとする
-	if _, err := url.Parse(tempURL); err == nil {
-		return tempURL, nil
-	}
-
-	// 4. HTTPSで失敗した場合、HTTPを試す
-	tempURL = "http://" + rawURL
-	if _, err := url.Parse(tempURL); err == nil {
-		return tempURL, nil
-	}
-
-	// 5. どちらのスキーム補完も失敗
-	return "", fmt.Errorf("URLのスキームを補完できませんでした。入力値: %s", rawURL)
+	// rawURLが最初のパースでエラーにならなかった場合、https://を付与しても有効なURLになるはず
+	return "https://" + rawURL, nil
 }
 
 // run は、アプリケーションの主要なロジックをカプセル化し、エラーを返します。
