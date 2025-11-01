@@ -2,13 +2,28 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
+	"time"
 
-	"github.com/shouni/go-web-exact/v2/internal/pipeline"
+	"github.com/shouni/go-http-kit/pkg/httpkit"
+	"github.com/shouni/go-web-exact/v2/pkg/extract"
 )
+
+// runExtractionPipeline は、Webコンテンツの抽出を実行するメインロジックです。
+func runExtractionPipeline(rawURL string, extractor *extract.Extractor) (text string, hasBody bool, err error) {
+	const overallTimeout = 60 * time.Second
+
+	// 1. 全体処理のコンテキストを設定
+	ctx, cancel := context.WithTimeout(context.Background(), overallTimeout)
+	defer cancel()
+
+	// 2. 抽出の実行
+	return extractor.FetchAndExtractText(rawURL, ctx)
+}
 
 func main() {
 	// 1. 標準入力からURLを読み取る (I/Oの責務)
@@ -23,24 +38,46 @@ func main() {
 	}
 	rawURL := scanner.Text()
 
-	// 2. URLのバリデーション (I/Oに近い責務)
+	// 2. URLのバリデーションとスキーム補完
 	if rawURL == "" {
 		log.Fatalf("無効なURLが入力されました。")
 	}
+
 	parsedURL, err := url.Parse(rawURL)
-	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
-		log.Fatalf("無効なURLスキームです: %s", rawURL)
+	if err != nil {
+		log.Fatalf("URLのパースエラー: %v", err)
+	}
+
+	// スキームがない場合、http:// を補完するロジックを追加
+	if parsedURL.Scheme == "" || parsedURL.Scheme == "." {
+		rawURL = "http://" + rawURL
+		parsedURL, err = url.Parse(rawURL)
+		if err != nil {
+			log.Fatalf("URLのパースエラー (スキーム補完後): %v", err)
+		}
+	}
+
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		log.Fatalf("無効なURLスキームです。httpまたはhttpsを指定してください: %s", rawURL)
 	}
 	fmt.Printf("入力されたURL: %s\n", rawURL)
 
-	// 3. メインロジックの実行
-	text, hasBody, err := pipeline.ExtractURLContent(rawURL)
-
+	// 3. 依存性の初期化 (DIコンテナの役割)
+	const clientTimeout = 30 * time.Second
+	fetcher := httpkit.New(clientTimeout, httpkit.WithMaxRetries(2))
+	extractor, err := extract.NewExtractor(fetcher)
 	if err != nil {
-		log.Fatalf("処理中にエラーが発生しました: %v", err) // 処理実行エラーを報告
+		log.Fatalf("Extractorの初期化エラー: %v", err)
 	}
 
-	// 4. 結果の出力 (main.goの責務)
+	// 4. メインロジックの実行 (ヘルパー関数を呼び出し)
+	text, hasBody, err := runExtractionPipeline(rawURL, extractor)
+
+	if err != nil {
+		log.Fatalf("処理中にエラーが発生しました: %v", err)
+	}
+
+	// 5. 結果の出力
 	if !hasBody {
 		fmt.Printf("本文は見つかりませんでしたが、タイトルを取得しました:\n%s\n", text)
 	} else {
