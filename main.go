@@ -54,15 +54,23 @@ func run() error {
 		return fmt.Errorf("URLのパースエラー: %w", err)
 	}
 
-	// スキームがない場合、http:// を補完するロジックを追加
+	// オプション1: HTTPSを優先的に試す
 	if parsedURL.Scheme == "" {
-		rawURL = "http://" + rawURL
-		parsedURL, err = url.Parse(rawURL)
-		if err != nil {
-			return fmt.Errorf("URLのパースエラー (スキーム補完後): %w", err)
+		// まずHTTPSを試す
+		tempURL := "https://" + rawURL
+		parsedURL, err = url.Parse(tempURL)
+		if err != nil || (parsedURL.Scheme != "https" && parsedURL.Scheme != "http") {
+			// HTTPSでパース失敗、または不正なスキームの場合、HTTPを試す
+			rawURL = "http://" + rawURL
+			parsedURL, err = url.Parse(rawURL)
+			if err != nil {
+				return fmt.Errorf("URLのパースエラー (スキーム補完後): %w", err)
+			}
+		} else {
+			rawURL = tempURL // HTTPSで成功
 		}
 	}
-
+	// その後のバリデーションは既存のままでOK
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return fmt.Errorf("無効なURLスキームです。httpまたはhttpsを指定してください: %s", rawURL)
 	}

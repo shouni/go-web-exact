@@ -32,7 +32,7 @@
 `go-web-exact` は、以下の **`Fetcher`** インターフェースに依存します。
 
 ```go
-// pkg/extract/interface.go (このライブラリ内で定義)
+package extract
 
 // Fetcher は、指定されたURLからリトライ付きでコンテンツを取得するクライアントインターフェースです。
 type Fetcher interface {
@@ -59,7 +59,7 @@ import (
 
 // main関数の例
 func main() {
-    url := "[https://github.com/shouni/go-web-exact](https://github.com/shouni/go-web-exact)"
+    url := "https://github.com/shouni/go-web-exact"
 
     // 1. 外部の Fetcher 実装を初期化 (go-http-kitを利用)
     // httpkit.Client は extract.Fetcher インターフェースを満たします
