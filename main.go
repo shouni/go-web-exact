@@ -1,6 +1,7 @@
 package main
 
 import (
+	// 💡 修正 1: 標準ライブラリをグループ化し、最初に配置
 	"bufio"
 	"context"
 	"fmt"
@@ -14,18 +15,25 @@ import (
 )
 
 // runExtractionPipeline は、Webコンテンツの抽出を実行するメインロジックです。
-func runExtractionPipeline(rawURL string, extractor *extract.Extractor) (text string, hasBody bool, err error) {
-	const overallTimeout = 60 * time.Second
-
+// 💡 修正 2: overallTimeout を引数として受け取るように変更
+func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallTimeout time.Duration) (text string, hasBody bool, err error) {
 	// 1. 全体処理のコンテキストを設定
 	ctx, cancel := context.WithTimeout(context.Background(), overallTimeout)
 	defer cancel()
 
 	// 2. 抽出の実行
-	return extractor.FetchAndExtractText(rawURL, ctx)
+	text, hasBody, err = extractor.FetchAndExtractText(rawURL, ctx)
+	if err != nil {
+		return "", false, fmt.Errorf("コンテンツ抽出エラー: %w", err)
+	}
+
+	return text, hasBody, nil
 }
 
 func main() {
+	const overallTimeout = 60 * time.Second
+	const clientTimeout = 30 * time.Second
+
 	// 1. 標準入力からURLを読み取る (I/Oの責務)
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Print("処理するURLを入力してください: ")
@@ -49,7 +57,8 @@ func main() {
 	}
 
 	// スキームがない場合、http:// を補完するロジックを追加
-	if parsedURL.Scheme == "" || parsedURL.Scheme == "." {
+	// 💡 修正 3: ". " の条件を削除し、スキームが空の場合のみ補完する
+	if parsedURL.Scheme == "" {
 		rawURL = "http://" + rawURL
 		parsedURL, err = url.Parse(rawURL)
 		if err != nil {
@@ -63,7 +72,7 @@ func main() {
 	fmt.Printf("入力されたURL: %s\n", rawURL)
 
 	// 3. 依存性の初期化 (DIコンテナの役割)
-	const clientTimeout = 30 * time.Second
+	// clientTimeout を使用して fetcher を初期化
 	fetcher := httpkit.New(clientTimeout, httpkit.WithMaxRetries(2))
 	extractor, err := extract.NewExtractor(fetcher)
 	if err != nil {
@@ -71,7 +80,8 @@ func main() {
 	}
 
 	// 4. メインロジックの実行 (ヘルパー関数を呼び出し)
-	text, hasBody, err := runExtractionPipeline(rawURL, extractor)
+	// 💡 修正 2: overallTimeout を引数として渡す
+	text, hasBody, err := runExtractionPipeline(rawURL, extractor, overallTimeout)
 
 	if err != nil {
 		log.Fatalf("処理中にエラーが発生しました: %v", err)
