@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/PuerkitoBio/goquery"
 	textUtils "github.com/shouni/go-utils/text"
+	"golang.org/x/net/html"
+	"strings"
 )
 
 // Extractor は、Fetcher を使ってコンテンツ抽出プロセスを管理します。
@@ -121,6 +121,7 @@ func (e *Extractor) findMainContent(doc *goquery.Document) *goquery.Selection {
 
 // processGeneralElement は一般的なテキスト要素からテキストを抽出し、整形します。
 // 子孫の pre や table 要素のテキストを含めないようにカスタム走査を行います。
+// processGeneralElement は一般的なテキスト要素からテキストを抽出、整形します。
 func (e *Extractor) processGeneralElement(s *goquery.Selection) string {
 	var builder strings.Builder
 
@@ -128,18 +129,26 @@ func (e *Extractor) processGeneralElement(s *goquery.Selection) string {
 	var extractText func(sel *goquery.Selection)
 	extractText = func(sel *goquery.Selection) {
 		sel.Contents().Each(func(i int, child *goquery.Selection) {
+			node := child.Get(0) // *html.Node を取得
+
+			if node == nil {
+				return
+			}
+
 			// テキストノードの場合
-			if goquery.NodeName(child) == "#text" {
-				builder.WriteString(child.Text())
-			} else if goquery.NodeName(child) != "" {
+			if node.Type == html.TextNode {
+				// テキストノードの内容は node.Data に格納されている
+				builder.WriteString(node.Data)
+			} else if node.Type == html.ElementNode {
 				// 要素ノードの場合
 				if child.Is("pre") || child.Is("table") {
-					// pre または table 要素はスキップ (DOMを破壊しない安全な除外)
+					// pre または table 要素はスキップ
 					return
 				}
 				// それ以外の要素ノードは再帰的に処理
 				extractText(child)
 			}
+			// コメントノードやDOCTYPEなどは無視
 		})
 	}
 
