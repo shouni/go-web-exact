@@ -119,21 +119,41 @@ func (e *Extractor) findMainContent(doc *goquery.Document) *goquery.Selection {
 	return mainContent
 }
 
-// processGeneralElement は生成する
+// processGeneralElement は一般的なテキスト要素からテキストを抽出し、整形します。
+// 子孫の pre や table 要素のテキストを含めないようにカスタム走査を行います。
 func (e *Extractor) processGeneralElement(s *goquery.Selection) string {
-	tempSelection := s.Clone()
-	tempSelection.Find("pre, table").Remove() // 子孫の pre, table を除去
+	var builder strings.Builder
 
-	text := tempSelection.Text()
+	// s の子孫から pre, table を除外してテキストを抽出する再帰ヘルパー関数
+	var extractText func(sel *goquery.Selection)
+	extractText = func(sel *goquery.Selection) {
+		sel.Contents().Each(func(i int, child *goquery.Selection) {
+			// テキストノードの場合
+			if goquery.NodeName(child) == "#text" {
+				builder.WriteString(child.Text())
+			} else if goquery.NodeName(child) != "" {
+				// 要素ノードの場合
+				if child.Is("pre") || child.Is("table") {
+					// pre または table 要素はスキップ (DOMを破壊しない安全な除外)
+					return
+				}
+				// それ以外の要素ノードは再帰的に処理
+				extractText(child)
+			}
+		})
+	}
+
+	// s 自身の子孫を走査してテキストを抽出
+	extractText(s)
+	text := builder.String()
+
+	// 以降は既存のロジックを維持
 	text = textUtils.NormalizeText(text)
-
 	isHeading := s.Is("h1, h2, h3, h4, h5, h6")
 	isListItem := s.Is("li")
 	if text == "" {
 		return ""
 	}
-
-	// ... (既存の長さチェックロジックを続行) ...
 	if isHeading {
 		if len(text) > MinHeadingLength {
 			return "## " + text
