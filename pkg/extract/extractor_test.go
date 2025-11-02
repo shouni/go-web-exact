@@ -1,4 +1,4 @@
-package extract
+package extract_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	// 実際のパッケージのインポートパスに修正してください
+	"github.com/shouni/go-web-exact/v2/pkg/extract"
 )
 
 // ======================================================================
@@ -14,7 +16,6 @@ import (
 // ======================================================================
 
 // MockFetcher はテスト用の extract.Fetcher インターフェースの実装です。
-// NOTE: Extractor の Fetcher インターフェースを満たす必要があります。
 type MockFetcher struct {
 	htmlContent string
 	fetchError  error
@@ -36,15 +37,14 @@ func (m *MockFetcher) FetchBytes(url string, ctx context.Context) ([]byte, error
 func TestNewExtractor(t *testing.T) {
 	t.Run("success_with_valid_fetcher", func(t *testing.T) {
 		fetcher := &MockFetcher{}
-		extractor, err := NewExtractor(fetcher)
+		// NOTE: NewExtractorは extract パッケージの関数を呼び出す
+		extractor, err := extract.NewExtractor(fetcher)
 		assert.NoError(t, err)
 		assert.NotNil(t, extractor)
-		assert.Equal(t, fetcher, extractor.fetcher)
 	})
 
 	t.Run("error_with_nil_fetcher", func(t *testing.T) {
-		// 修正: NewExtractorがnilを許容しない契約をテスト
-		extractor, err := NewExtractor(nil)
+		extractor, err := extract.NewExtractor(nil)
 		assert.Error(t, err)
 		assert.Nil(t, extractor)
 		assert.Contains(t, err.Error(), "Fetcher cannot be nil")
@@ -57,7 +57,6 @@ func TestFetchAndExtractText(t *testing.T) {
 	const (
 		titlePrefix        = "【記事タイトル】 "
 		tableCaptionPrefix = "【表題】 "
-		// minParagraphLength = 20 // テストではリテラルを使用しない
 	)
 
 	// 本文として抽出されるための十分な長さを持つパラグラフ
@@ -114,21 +113,19 @@ func TestFetchAndExtractText(t *testing.T) {
 			expectedError:     false,
 		},
 
-		// 5. テーブルと pre タグのテスト (順序とpreテキスト整形を本体コードの挙動に合わせる)
+		// 5. テーブルと pre タグのテスト (順序と短い段落の無視を反映)
 		{
 			name: "document_with_table_and_pre",
-			html: `<html><head><title>Code Table</title></head><body><div id="content">
-                <table><caption>Data Table</caption><tr><th>Col1</th><td>Val1</td></tr></table>
-                <pre>
-                   func hello() {}
-                </pre>
-               </div></body></html>`,
-			expectedText: titlePrefix + "Code Table" + "\n\n" +
-				"```\n" +
-				"func hello() {}" + "\n" +
-				"```" + "\n\n" +
-				tableCaptionPrefix + "Data Table" + "\n" +
-				"Col1 | Val1",
+			url:  "http://example.com/table-and-pre",
+			html: `<html><head><title>Code Table</title></head><body><main>
+                   <article>
+                      <p>Intro text</p>
+                      <table><caption>Data Table</caption><tr><td>Col1</td><td>Val1</td></tr></table>
+                      <pre>func hello() {}</pre>
+                   </article>
+                   </main></body></html>`,
+			// 修正: "Intro text" (10文字) は MinParagraphLength=20 より短いため無視される
+			expectedText:      "【記事タイトル】 Code Table\n\n【表題】 Data Table\nCol1 | Val1\n\n```\nfunc hello() {}\n```",
 			expectedBodyFound: true,
 			expectedError:     false,
 		},
@@ -162,9 +159,9 @@ func TestFetchAndExtractText(t *testing.T) {
 				fetchError:  tc.fetchErr,
 			}
 
-			// 修正: NewExtractorの戻り値を受け取るように変更し、エラーをチェック
-			extractor, err := NewExtractor(fetcher)
-			assert.NoError(t, err) // NewExtractorのnilチェックは既にTestNewExtractorで確認済み
+			// Extractorの初期化 (extract.Fetcher インターフェースとして渡す)
+			extractor, err := extract.NewExtractor(fetcher)
+			assert.NoError(t, err)
 
 			ctx := context.Background()
 

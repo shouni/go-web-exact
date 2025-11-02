@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strings"
-
 	"github.com/PuerkitoBio/goquery"
 	textUtils "github.com/shouni/go-utils/text"
+	"golang.org/x/net/html"
+	"strings"
 )
 
 // Extractor は、Fetcher を使ってコンテンツ抽出プロセスを管理します。
@@ -70,33 +70,42 @@ func (e *Extractor) extractContentText(doc *goquery.Document) (text string, hasB
 	if pageTitle != "" {
 		parts = append(parts, titlePrefix+pageTitle)
 	}
+
 	// 2. メインコンテンツの特定
 	mainContent := e.findMainContent(doc)
+
 	// 3. ノイズ要素の除去
 	mainContent.Find(noiseSelectors).Remove()
 
-	// 4. テーブル、pre 以外のテキスト要素を取得し、テキストを結合
-	mainContent.Find(textExtractionTags).Each(func(i int, s *goquery.Selection) {
-		if content := e.processGeneralElement(s); content != "" {
+	// 4. すべての関連コンテンツ要素（p, h*, li, blockquote, table, pre）を結合したセレクター
+	//    このセレクターは、goqueryによってDOMの出現順に走査されます。
+	//    親要素が子の要素を含む場合（例：<div><p>...</p><table>...</table></div>）、
+	//    goqueryは重複を排除し、DOMの深さ優先探索順序で要素を返します。
+	contentSelectors := textExtractionTags + ", table, pre"
+
+	mainContent.Find(contentSelectors).Each(func(i int, s *goquery.Selection) {
+		var content string
+
+		if s.Is("table") {
+			// テーブルの処理
+			content = processTable(s)
+		} else if s.Is("pre") {
+			// pre タグ (コードブロック) の処理
+			preText := strings.TrimSpace(s.Text())
+			if preText != "" {
+				content = "```\n" + preText + "\n```"
+			}
+		} else {
+			// 一般的なテキスト要素 (p, h*, li, blockquote) の処理
+			content = e.processGeneralElement(s)
+		}
+
+		if content != "" {
 			parts = append(parts, content)
 		}
 	})
 
-	// 5. pre タグを個別に処理
-	mainContent.Find("pre").Each(func(i int, s *goquery.Selection) {
-		preText := strings.TrimSpace(s.Text())
-		if preText != "" {
-			parts = append(parts, "```\n"+preText+"\n```")
-		}
-	})
-
-	// 6. テーブルを個別に処理
-	mainContent.Find("table").Each(func(i int, s *goquery.Selection) {
-		if content := processTable(s); content != "" {
-			parts = append(parts, content)
-		}
-	})
-	// 7. 抽出結果の検証
+	// 5. 抽出結果の検証
 	return e.validateAndFormatResult(parts)
 }
 
@@ -110,9 +119,43 @@ func (e *Extractor) findMainContent(doc *goquery.Document) *goquery.Selection {
 	return mainContent
 }
 
-// processGeneralElement は生成する
+// processGeneralElement は一般的なテキスト要素からテキストを抽出し、整形します。
+// 子孫の pre や table 要素のテキストを含めないようにカスタム走査を行います
 func (e *Extractor) processGeneralElement(s *goquery.Selection) string {
-	text := s.Text()
+	var builder strings.Builder
+
+	// s の子孫から pre, table を除外してテキストを抽出する再帰ヘルパー関数
+	var extractText func(sel *goquery.Selection)
+	extractText = func(sel *goquery.Selection) {
+		sel.Contents().Each(func(i int, child *goquery.Selection) {
+			node := child.Get(0) // *html.Node を取得
+
+			if node == nil {
+				return
+			}
+
+			// テキストノードの場合
+			if node.Type == html.TextNode {
+				// テキストノードの内容は node.Data に格納されている
+				builder.WriteString(node.Data)
+			} else if node.Type == html.ElementNode {
+				// 要素ノードの場合
+				if child.Is("pre") || child.Is("table") {
+					// pre または table 要素はスキップ
+					return
+				}
+				// それ以外の要素ノードは再帰的に処理
+				extractText(child)
+			}
+			// コメントノードやDOCTYPEなどは無視
+		})
+	}
+
+	// s 自身の子孫を走査してテキストを抽出
+	extractText(s)
+	text := builder.String()
+
+	// 以降は既存のロジックを維持
 	text = textUtils.NormalizeText(text)
 	isHeading := s.Is("h1, h2, h3, h4, h5, h6")
 	isListItem := s.Is("li")
