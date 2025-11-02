@@ -70,33 +70,42 @@ func (e *Extractor) extractContentText(doc *goquery.Document) (text string, hasB
 	if pageTitle != "" {
 		parts = append(parts, titlePrefix+pageTitle)
 	}
+
 	// 2. メインコンテンツの特定
 	mainContent := e.findMainContent(doc)
+
 	// 3. ノイズ要素の除去
 	mainContent.Find(noiseSelectors).Remove()
 
-	// 4. テーブル、pre 以外のテキスト要素を取得し、テキストを結合
-	mainContent.Find(textExtractionTags).Each(func(i int, s *goquery.Selection) {
-		if content := e.processGeneralElement(s); content != "" {
+	// 4. すべての関連コンテンツ要素（p, h*, li, blockquote, table, pre）を結合したセレクター
+	//    このセレクターは、goqueryによってDOMの出現順に走査されます。
+	//    親要素が子の要素を含む場合（例：<div><p>...</p><table>...</table></div>）、
+	//    goqueryは重複を排除し、DOMの深さ優先探索順序で要素を返します。
+	contentSelectors := textExtractionTags + ", table, pre"
+
+	mainContent.Find(contentSelectors).Each(func(i int, s *goquery.Selection) {
+		var content string
+
+		if s.Is("table") {
+			// テーブルの処理
+			content = processTable(s)
+		} else if s.Is("pre") {
+			// pre タグ (コードブロック) の処理
+			preText := strings.TrimSpace(s.Text())
+			if preText != "" {
+				content = "```\n" + preText + "\n```"
+			}
+		} else {
+			// 一般的なテキスト要素 (p, h*, li, blockquote) の処理
+			content = e.processGeneralElement(s)
+		}
+
+		if content != "" {
 			parts = append(parts, content)
 		}
 	})
 
-	// 5. pre タグを個別に処理
-	mainContent.Find("pre").Each(func(i int, s *goquery.Selection) {
-		preText := strings.TrimSpace(s.Text())
-		if preText != "" {
-			parts = append(parts, "```\n"+preText+"\n```")
-		}
-	})
-
-	// 6. テーブルを個別に処理
-	mainContent.Find("table").Each(func(i int, s *goquery.Selection) {
-		if content := processTable(s); content != "" {
-			parts = append(parts, content)
-		}
-	})
-	// 7. 抽出結果の検証
+	// 5. 抽出結果の検証
 	return e.validateAndFormatResult(parts)
 }
 
