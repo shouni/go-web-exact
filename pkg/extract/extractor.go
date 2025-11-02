@@ -121,13 +121,19 @@ func (e *Extractor) findMainContent(doc *goquery.Document) *goquery.Selection {
 
 // processGeneralElement は生成する
 func (e *Extractor) processGeneralElement(s *goquery.Selection) string {
-	text := s.Text()
+	tempSelection := s.Clone()
+	tempSelection.Find("pre, table").Remove() // 子孫の pre, table を除去
+
+	text := tempSelection.Text()
 	text = textUtils.NormalizeText(text)
+
 	isHeading := s.Is("h1, h2, h3, h4, h5, h6")
 	isListItem := s.Is("li")
 	if text == "" {
 		return ""
 	}
+
+	// ... (既存の長さチェックロジックを続行) ...
 	if isHeading {
 		if len(text) > MinHeadingLength {
 			return "## " + text
