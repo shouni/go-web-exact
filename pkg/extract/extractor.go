@@ -120,8 +120,7 @@ func (e *Extractor) findMainContent(doc *goquery.Document) *goquery.Selection {
 }
 
 // processGeneralElement は一般的なテキスト要素からテキストを抽出し、整形します。
-// 子孫の pre や table 要素のテキストを含めないようにカスタム走査を行います。
-// processGeneralElement は一般的なテキスト要素からテキストを抽出、整形します。
+// 子孫の pre や table 要素のテキストを含めないようにカスタム走査を行います
 func (e *Extractor) processGeneralElement(s *goquery.Selection) string {
 	var builder strings.Builder
 
