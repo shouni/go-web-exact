@@ -22,8 +22,10 @@ func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallT
 	defer cancel()
 
 	// 2. 抽出の実行
-	text, isBodyExtracted, err = extractor.FetchAndExtractText(rawURL, ctx)
+	// Context付きで extractor.FetchAndExtractText を呼び出し、タイムアウトを伝播させる
+	text, isBodyExtracted, err = extractor.FetchAndExtractText(ctx, rawURL)
 	if err != nil {
+		// エラーのラッピング
 		return "", false, fmt.Errorf("コンテンツ抽出エラー: %w", err)
 	}
 
@@ -77,6 +79,7 @@ func run() error {
 	fmt.Printf("入力されたURL: %s\n", rawURL)
 
 	// 3. 依存性の初期化 (DIコンテナの役割)
+	// リトライ機能付きの httpkit.Client を初期化し、Fetcherとして利用
 	fetcher := httpkit.New(clientTimeout, httpkit.WithMaxRetries(5))
 	extractor, err := extract.NewExtractor(fetcher)
 	if err != nil {
