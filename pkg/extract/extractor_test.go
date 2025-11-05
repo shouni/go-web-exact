@@ -22,7 +22,8 @@ type MockFetcher struct {
 }
 
 // FetchBytes はモックされたHTMLをバイト配列として返すか、エラーを返します。
-func (m *MockFetcher) FetchBytes(url string, ctx context.Context) ([]byte, error) {
+// 💡 修正: Goの慣習と extract.Fetcher の要件に合わせて引数の順序を (ctx, url) に変更
+func (m *MockFetcher) FetchBytes(ctx context.Context, url string) ([]byte, error) {
 	if m.fetchError != nil {
 		return nil, m.fetchError
 	}
@@ -164,9 +165,7 @@ func TestFetchAndExtractText(t *testing.T) {
 			assert.NoError(t, err)
 
 			ctx := context.Background()
-
-			// 実行
-			actualText, actualBodyFound, err := extractor.FetchAndExtractText("https://example.com/"+tc.name, ctx)
+			actualText, actualBodyFound, err := extractor.FetchAndExtractText(ctx, "https://example.com/"+tc.name)
 
 			// 1. エラーチェック
 			if tc.expectedError {
