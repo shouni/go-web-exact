@@ -77,5 +77,6 @@ func Execute() {
 		addAppPersistentFlags,
 		initAppPreRunE,
 		extractCmd,
+		parseCmd,
 	)
 }
