@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/PuerkitoBio/goquery"
 	textUtils "github.com/shouni/go-utils/text"
 	"golang.org/x/net/html"
-	"strings"
 )
 
 // Extractor は、Fetcher を使ってコンテンツ抽出プロセスを管理します。
@@ -46,9 +47,9 @@ const (
 // ----------------------------------------------------------------------
 
 // FetchAndExtractText は指定されたURLからコンテンツを取得し、整形されたテキストを抽出します。
-func (e *Extractor) FetchAndExtractText(url string, ctx context.Context) (text string, hasBodyFound bool, err error) {
+func (e *Extractor) FetchAndExtractText(ctx context.Context, url string) (text string, hasBodyFound bool, err error) {
 	// 1. Fetcherから生のバイト配列を取得 (通信の責務)
-	htmlBytes, err := e.fetcher.FetchBytes(url, ctx)
+	htmlBytes, err := e.fetcher.FetchBytes(ctx, url)
 	if err != nil {
 		return "", false, err
 	}

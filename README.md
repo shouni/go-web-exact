@@ -30,9 +30,11 @@
 ```go
 package extract
 
+import "context" // contextが必要
+
 // Fetcher は、指定されたURLからリトライ付きでコンテンツを取得するクライアントインターフェースです。
 type Fetcher interface {
-    FetchBytes(url string, ctx context.Context) ([]byte, error)
+    FetchBytes(ctx context.Context, url string) ([]byte, error)
 }
 ```
 
@@ -64,13 +66,16 @@ func main() {
 
     // 2. Extractor を初期化 (FetcherをDI)
     extractor, err := extract.NewExtractor(fetcher)
+    if err != nil {
+        log.Fatalf("Extractorの初期化エラー: %v", err)
+    }
 
     // 3. 全体処理のコンテキストを設定
     ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
     defer cancel()
 
     // 4. 抽出の実行
-    text, hasBody, err := extractor.FetchAndExtractText(url, ctx)
+    text, hasBody, err := extractor.FetchAndExtractText(ctx, url)
 
     if err != nil {
        // エラー処理 
@@ -110,5 +115,3 @@ func main() {
 ### 📜 ライセンス (License)
 
 このプロジェクトは [MIT License](https://opensource.org/licenses/MIT) の下で公開されています。
-
-
