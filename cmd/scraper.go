@@ -30,7 +30,6 @@ func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency 
 	// クライアントタイムアウト(Flags.TimeoutSec)を基に全体のタイムアウトを計算し、一貫性を保つ。
 	var clientTimeout time.Duration
 	if Flags.TimeoutSec == 0 {
-		// Flags.TimeoutSecが0の場合、ルートコマンドのデフォルト値(defaultTimeoutSec=10)が適用されている
 		clientTimeout = defaultTimeoutSec * time.Second
 	} else {
 		clientTimeout = time.Duration(Flags.TimeoutSec) * time.Second
