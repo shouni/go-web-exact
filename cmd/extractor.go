@@ -13,12 +13,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// コマンドラインフラグ変数を定義
 var rawUrl string
 
-// NOTE: この定数は cmd/root.go に移動し、DefaultOverallTimeoutIfClientTimeoutIsZero として定義されましたが、
-// 便宜上、このファイルでの修正対象として残します。ただし、コンパイルのためには root.go の定数を使うべきです。
-// ここでは、以前のコンテキストでそのまま残っていた定数定義を維持します。
-const defaultOverallTimeoutIfClientTimeoutIsZero = 20 * time.Second
+// NOTE: 以前このファイルにあった定数 defaultOverallTimeoutIfClientTimeoutIsZero は削除されました。
+// 代わりに、cmd/root.go で定義された DefaultOverallTimeout を使用します。
 
 // runExtractionPipeline は、Webコンテンツの抽出を実行するメインロジックです。
 func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallTimeout time.Duration) (text string, isBodyExtracted bool, err error) {
@@ -37,7 +36,6 @@ func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallT
 }
 
 // ensureScheme は、URLのスキームが存在しない場合に https:// を補完します。
-// 既にスキームが存在する場合は、それが http または https であるかをチェックします。
 func ensureScheme(rawURL string) (string, error) {
 	// 1. まず現在のURLをパース
 	parsedURL, err := url.Parse(rawURL)
@@ -60,22 +58,21 @@ func ensureScheme(rawURL string) (string, error) {
 
 // 💡 アーキテクチャに関する指摘: DIを推奨。GetGlobalFetcher()への依存はテスト容易性を低下させる。
 var extractorcmd = &cobra.Command{
-	// 💡 修正点1: Use から不要な位置引数 [URL] を削除
 	Use:   "extract",
 	Short: "指定されたURLまたは標準入力からWebコンテンツのテキストを取得します",
 	Long:  `指定されたURLまたは標準入力からWebコンテンツのテキストを取得します。`,
 
-	// 💡 修正点2: 位置引数エラーを解消するため、Args: cobra.NoArgs を追加
+	// 位置引数は取らない設定
 	Args: cobra.NoArgs,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		// overallTimeout の設定: クライアントタイムアウト (Flags.TimeoutSec) の2倍を全体のタイムアウトとします。
-		// 💡 修正点3: time.Durationにキャストしてから乗算を行い、オーバーフローを回避
+		// 💡 修正点1: intのオーバーフローを防ぐため、time.Durationにキャストしてから乗算する
 		overallTimeout := time.Duration(Flags.TimeoutSec) * 2 * time.Second
 		if Flags.TimeoutSec == 0 {
-			// 💡 修正点4: マジックナンバーを定数に置き換え (定数は root.go のものを使うべきだが、このファイル内の定義を使用)
-			overallTimeout = defaultOverallTimeoutIfClientTimeoutIsZero
+			// 💡 修正点2: 新しいグローバル定数 DefaultOverallTimeout を参照する
+			overallTimeout = DefaultOverallTimeout
 		}
 
 		// 1. 処理対象URLの決定 (フラグ優先)
@@ -102,10 +99,10 @@ var extractorcmd = &cobra.Command{
 		log.Printf("処理対象URL: %s (全体タイムアウト: %s)\n", processedURL, overallTimeout)
 
 		// 3. 依存性の初期化
-		// cmd/root.go で初期化された共有フェッチャーを使用。ユーザー指定の --timeout と --max-retries が反映されます。
+		// cmd/root.go で初期化された共有フェッチャーを使用。
 		fetcher := GetGlobalFetcher()
 		if fetcher == nil {
-			// 💡 修正点5: エラーメッセージをより抽象的にする (root.go の内部実装への言及を避ける)
+			// 💡 修正点3: エラーメッセージを抽象化
 			return fmt.Errorf("HTTPクライアントの取得に失敗しました")
 		}
 
@@ -118,7 +115,7 @@ var extractorcmd = &cobra.Command{
 		// 4. メインロジックの実行
 		text, isBodyExtracted, err := runExtractionPipeline(processedURL, extractor, overallTimeout)
 		if err != nil {
-			// 💡 修正点6: エラーメッセージに processedURL 情報を含める
+			// 💡 修正点4: エラーメッセージに processedURL 情報を含める
 			return fmt.Errorf("コンテンツ抽出パイプラインの実行エラー (URL: %s): %w", processedURL, err)
 		}
 

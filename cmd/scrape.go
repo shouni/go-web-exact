@@ -24,13 +24,17 @@ var (
 func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency int) {
 
 	// 1. Scraperの初期化 (記憶された NewParallelScraper を利用)
+	// NOTE: scraper パッケージ内で DefaultMaxConcurrency をチェックしているため、ここでは NewParallelScraper に渡すだけで良い。
 	scraper := scraper.NewParallelScraper(extractor, concurrency)
 
 	// 2. タイムアウト設定は、個々のリクエストではなく、全体の処理に適用します。
 	// extractCmdと統一するため、クライアントタイムアウト (Flags.TimeoutSec) の2倍を全体のタイムアウトとします。
+
+	// 💡 修正点1: intのオーバーフローを防ぐため、time.Durationにキャストしてから乗算する
 	overallTimeout := time.Duration(Flags.TimeoutSec) * 2 * time.Second
 	if Flags.TimeoutSec == 0 {
-		overallTimeout = DefaultOverallTimeoutIfClientTimeoutIsZero
+		// 💡 修正点2: 新しいグローバル定数 DefaultOverallTimeout を参照する
+		overallTimeout = DefaultOverallTimeout
 	}
 
 	// 3. 全体処理のコンテキストを設定
@@ -38,7 +42,7 @@ func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency 
 	defer cancel()
 
 	log.Printf("並列スクレイピング開始 (対象URL数: %d, 最大同時実行数: %d, 全体タイムアウト: %s)\n",
-		len(urls), scraper.DefaultMaxConcurrency, overallTimeout)
+		len(urls), scraper.DefaultMaxConcurrency, overallTimeout) // scraper.DefaultMaxConcurrency は定数なので、concurrency 変数を使っても良い
 
 	// 4. メインロジックの実行
 	results := scraper.ScrapeInParallel(ctx, urls)

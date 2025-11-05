@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/mmcdole/gofeed"
-	"github.com/shouni/go-http-kit/pkg/httpkit"
 )
 
 // Parserが依存すべきインターフェース
@@ -22,8 +21,8 @@ type Parser struct {
 // コアとなるデータ取得・パース機能
 
 // NewParser は新しい Parser インスタンスを初期化し、依存関係を注入します。
-// *httpkit.Client は Fetcher インターフェースを満たしているため、そのまま代入可能です。
-func NewParser(client *httpkit.Client) *Parser {
+// *httpkit.Client ではなく Fetcher インターフェースを受け取るように変更します。
+func NewParser(client Fetcher) *Parser {
 	return &Parser{client: client}
 }
 

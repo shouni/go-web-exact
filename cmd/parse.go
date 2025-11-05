@@ -7,18 +7,17 @@ import (
 	"time"
 
 	"github.com/mmcdole/gofeed"
-	"github.com/shouni/go-http-kit/pkg/httpkit"
+	"github.com/shouni/go-http-kit/pkg/httpkit" // *httpkit.Client にダウンキャストするため必要
 	"github.com/spf13/cobra"
 
 	// ユーザーの記憶にある package feed (parser.go) を利用します
-	"prototypus-ai-doc-go/pkg/feed"
+	"github.com/shouni/go-web-exact/v2/pkg/feed"
 )
 
 // フィードURLを保持するフラグ変数
 var feedURL string
 
 // フィードの全体処理のタイムアウト設定 (extractCmdと統一)
-// 💡 修正点2: Flags.TimeoutSecがHTTPクライアントのタイムアウトであることを明記
 // Flags.TimeoutSec はHTTPクライアントのタイムアウト秒数を表します。
 const overallFeedTimeoutFactor = 2 // クライアントタイムアウトの2倍
 
@@ -48,31 +47,30 @@ var parseCmd = &cobra.Command{
 
 		// Flags.TimeoutSec は cmd/root.go で定義されています
 		// 全体タイムアウトを設定: クライアントタイムアウトの2倍 (extractCmdと統一)
-		// 💡 修正点3: intのオーバーフローを防ぐため、time.Durationにキャストしてから乗算する
+		// 💡 修正点1: intのオーバーフローを防ぐため、time.Durationにキャストしてから乗算する
 		overallTimeout := time.Duration(Flags.TimeoutSec) * overallFeedTimeoutFactor * time.Second
 		if Flags.TimeoutSec == 0 {
-			// 💡 修正点4: root.goで定義した共通定数を参照 (コンパイルエラーを解消)
-			overallTimeout = DefaultOverallTimeoutIfClientTimeoutIsZero
+			// 💡 修正点2: 新しいグローバル定数 DefaultOverallTimeout を参照する
+			overallTimeout = DefaultOverallTimeout
 		}
 
-		// 💡 修正点5: log.Printfの改行コードを削除し、一貫性を保つ (現状維持の選択肢も考慮しつつクリーンアップ)
+		// 💡 修正点3: log.Printfの改行コードを削除し、一貫性を保つ
 		log.Printf("処理対象フィードURL: %s (全体タイムアウト: %s)", feedURL, overallTimeout)
 
 		// 1. 依存性の初期化
 		fetcher := GetGlobalFetcher()
 		if fetcher == nil {
-			// 💡 修正点6: エラーメッセージから内部実装の詳細（PreRun）への言及を避ける
+			// 💡 修正点4: エラーメッセージから内部実装の詳細への言及を避ける
 			return fmt.Errorf("HTTPクライアントの取得に失敗しました")
 		}
 
-		// 2. Fetcherインターフェースから具体的な *httpkit.Client の実装にダウンキャスト
+		// 💡 修正点5: 記憶されている feed.NewParser のシグネチャ (*httpkit.Client) に合わせるためダウンキャスト
 		client, ok := fetcher.(*httpkit.Client)
 		if !ok {
-			// 💡 修正点7: ダウンキャスト失敗時のエラーメッセージをより詳細にする
-			return fmt.Errorf("予期しないフェッチャーの実装です: %T。feed.NewParserが期待する型と異なります。", fetcher)
+			return fmt.Errorf("予期しないHTTPクライアントの実装です: %T。feed.NewParserは*httpkit.Clientを期待します。", fetcher)
 		}
 
-		// ユーザーの記憶にある package feed の NewParser を利用
+		// NewParser を利用
 		parser := feed.NewParser(client)
 
 		// 3. メインロジックの実行
@@ -90,7 +88,7 @@ var parseCmd = &cobra.Command{
 		fmt.Printf("合計記事数: %d\n", len(parsedFeed.Items))
 		fmt.Println("-----------------------")
 
-		// 💡 修正点8: 出力フォーマットの一貫性を確保するため、fmt.Printfに統一
+		// 💡 修正点6: 出力フォーマットの一貫性を確保するため、fmt.Printfに統一
 		for i, item := range parsedFeed.Items {
 			fmt.Printf("[%d] %s\n", i+1, item.Title)
 			fmt.Printf("    URL: %s\n", item.Link)
