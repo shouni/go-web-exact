@@ -8,7 +8,6 @@ require (
 	github.com/shouni/go-cli-base v1.0.5
 	github.com/shouni/go-http-kit v1.0.6
 	github.com/shouni/go-utils v1.0.7
-	github.com/shouni/go-web-exact v1.0.8
 	github.com/spf13/cobra v1.10.1
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.46.0
