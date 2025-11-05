@@ -18,7 +18,8 @@ const (
 // GlobalFlags はこのアプリケーション固有の永続フラグを保持
 // clibase.Flags は clibase 共通フラグ（Verbose, ConfigFile）を保持
 type AppFlags struct {
-	TimeoutSec int // --timeout タイムアウト 💡 修正点1: 不要なコメントを削除
+	// 💡 修正点1: コメントを簡潔に修正
+	TimeoutSec int // --timeout タイムアウト
 	MaxRetries int
 }
 
@@ -61,6 +62,8 @@ func initAppPreRunE(cmd *cobra.Command, args []string) error {
 }
 
 // GetGlobalFetcher は、初期化されたフェッチャーを返す関数
+// 💡 アーキテクチャに関する指摘: DIを推奨。clibaseの制約上、現状はグローバル関数を使用するが、
+// 理想的には、このフェッチャーをコンテキストまたはコマンド構造体を介して渡すべき。
 func GetGlobalFetcher() httpkit.Fetcher {
 	return globalFetcher
 }
