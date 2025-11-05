@@ -7,6 +7,7 @@ import (
 
 	clibase "github.com/shouni/go-cli-base"
 	"github.com/shouni/go-http-kit/pkg/httpkit"
+	"github.com/shouni/go-web-exact/v2/pkg/extract"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +31,7 @@ type AppFlags struct {
 }
 
 var Flags AppFlags                // アプリケーション固有フラグにアクセスするためのグローバル変数
-var globalFetcher httpkit.Fetcher // 全てのサブコマンドで共有されるHTTPクライアント
+var globalFetcher extract.Fetcher // または feed.Fetcher (両方満たすため)
 
 // 💡 ルートコマンドの定義
 var rootCmd = &cobra.Command{

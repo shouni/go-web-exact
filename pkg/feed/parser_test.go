@@ -3,7 +3,7 @@ package feed
 import (
 	"context"
 	"errors"
-	"strings" // stringsパッケージを追加
+	"strings"
 	"testing"
 )
 
