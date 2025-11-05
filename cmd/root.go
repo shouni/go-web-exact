@@ -12,29 +12,37 @@ import (
 const (
 	appName           = "webparse"
 	defaultTimeoutSec = 10 // 秒
+	defaultMaxRetries = 5  // デフォルトのリトライ回数
 )
 
 // GlobalFlags はこのアプリケーション固有の永続フラグを保持
 // clibase.Flags は clibase 共通フラグ（Verbose, ConfigFile）を保持
 type AppFlags struct {
 	TimeoutSec int // --timeout タイムアウト
+	MaxRetries int // 💡 修正点1: リトライ回数を保持するフィールドを追加
 }
 
 var Flags AppFlags // アプリケーション固有フラグにアクセスするためのグローバル変数
-
-// 💡 修正点1: パッケージレベルで httpkit.Fetcher インターフェースを保持する変数を定義
 var globalFetcher httpkit.Fetcher
 
 // --- アプリケーション固有のカスタム関数 ---
 
 // addAppPersistentFlags は、アプリケーション固有の永続フラグをルートコマンドに追加します。
 func addAppPersistentFlags(rootCmd *cobra.Command) {
-	// Flags.TimeoutSec にフラグの値をバインドします
+	// TimeoutSec のバインド
 	rootCmd.PersistentFlags().IntVar(
-		&Flags.TimeoutSec, // 変数のポインタを渡す
-		"timeout",         // フラグ名
-		defaultTimeoutSec, // デフォルト値
-		"HTTPリクエストのタイムアウト時間（秒）", // 説明
+		&Flags.TimeoutSec,
+		"timeout",
+		defaultTimeoutSec,
+		"HTTPリクエストのタイムアウト時間（秒）",
+	)
+
+	// 💡 修正点2: --max-retries フラグを追加
+	rootCmd.PersistentFlags().IntVar(
+		&Flags.MaxRetries,
+		"max-retries",
+		defaultMaxRetries,
+		"HTTPリクエストのリトライ最大回数",
 	)
 }
 
@@ -42,23 +50,18 @@ func addAppPersistentFlags(rootCmd *cobra.Command) {
 func initAppPreRunE(cmd *cobra.Command, args []string) error {
 	timeout := time.Duration(Flags.TimeoutSec) * time.Second
 
-	// clibase共通処理（Verboseなど）は clibase 側で既に実行されている
-	// clibaseのVerboseフラグと連携したロギング
 	if clibase.Flags.Verbose {
 		log.Printf("HTTPクライアントのタイムアウトを設定しました (Timeout: %s)。", timeout)
+		log.Printf("HTTPクライアントのリトライ回数を設定しました (MaxRetries: %d)。", Flags.MaxRetries) // ログ追加
 	}
 
-	// 💡 修正点2: PersistentPreRunE内で、グローバルな HTTP クライアント (Fetcher) を初期化
-	// root コマンド実行前に一度だけ初期化されるため、全てのサブコマンドで共有されます。
-	// クライアントごとのタイムアウトとして Flags.TimeoutSec を使用します。
-	// リトライはハードコードされた5回とします。
-	globalFetcher = httpkit.New(timeout, httpkit.WithMaxRetries(5))
+	// 💡 修正点3: Flags.MaxRetries を使用して httpkit.New を初期化
+	globalFetcher = httpkit.New(timeout, httpkit.WithMaxRetries(Flags.MaxRetries))
 
 	return nil
 }
 
-// 💡 修正点3: 初期化された httpkit.Fetcher を返すエクスポートされた関数
-// 他のサブコマンド（例：extractCmd）がこの共通依存性を取得するために使用します。
+// GetGlobalFetcher は、初期化されたフェッチャーを返す関数
 func GetGlobalFetcher() httpkit.Fetcher {
 	return globalFetcher
 }
@@ -67,12 +70,10 @@ func GetGlobalFetcher() httpkit.Fetcher {
 
 // Execute は、rootCmd を実行するメイン関数です。
 func Execute() {
-	// ここで clibase.Execute を使用して、ルートコマンドの構築と実行を委譲します。
-	// Execute(アプリ名, カスタムフラグ追加関数, PersistentPreRunE関数, サブコマンド...)
 	clibase.Execute(
 		appName,
 		addAppPersistentFlags,
 		initAppPreRunE,
-		extractCmd, // 既存のサブコマンド
+		extractCmd,
 	)
 }
