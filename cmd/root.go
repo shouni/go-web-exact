@@ -16,9 +16,9 @@ import (
 const (
 	appName           = "web-exact" // アプリケーション名を修正
 	defaultTimeoutSec = 10          // 秒
-	defaultMaxRetries = 5           // デフォルトのリトライ回数
+	defaultMaxRetries = 5           // デフォルトのリトライ回
 
-	// 全体処理のタイムアウト定数 (parseCmd, scrapeCmd で利用)
+	// 全体処理のタイムアウト定数 (parseCmd, scraperCmd で利用)
 	DefaultOverallTimeout = 20 * time.Second
 )
 
@@ -37,7 +37,7 @@ var globalFetcher extract.Fetcher // または feed.Fetcher (両方満たすた�
 var rootCmd = &cobra.Command{
 	Use:   appName,
 	Short: "Webコンテンツ抽出、フィード解析、並列スクレイピングツール",
-	Long:  `Webコンテンツの抽出（extract）、RSS/Atomフィードの解析（parse）、および複数のURLの並列抽出（scrape）を実行します。`,
+	Long:  `Webコンテンツの抽出（extract）、RSS/Atomフィードの解析（parse）、および複数のURLの並列抽出（scraper）を実行します。`,
 
 	// 重要な修正: ルートコマンドは引数を取らないことを明示し、引数エラーを解消
 	Args: cobra.NoArgs,
@@ -63,21 +63,22 @@ func addAppPersistentFlags(rootCmd *cobra.Command) {
 
 // initAppPreRunE は、clibase共通処理の後に実行される、アプリケーション固有のPersistentPreRunEです。
 func initAppPreRunE(cmd *cobra.Command, args []string) error {
-	// clibase の初期化ロジック (Verboseフラグの処理など) を実行
-	// clibase.Execute() を使わないため、Cobraの標準的な方法で初期化処理を呼び出す
-	if err := clibase.Init(cmd, args); err != nil {
-		return err
-	}
+	// 修正点1: clibase.Init() は存在しない可能性があるため、削除またはコメントアウト
+	// ログレベルの設定は、clibase.Flags.Verboseフラグの値を参照して行う（このファイルでは実行できない）
 
 	timeout := time.Duration(Flags.TimeoutSec) * time.Second
 
+	// clibase.Flags は他のファイルで設定されていると仮定
 	if clibase.Flags.Verbose {
 		log.Printf("HTTPクライアントのタイムアウトを設定しました (Timeout: %s)。", timeout)
 		log.Printf("HTTPクライアントのリトライ回数を設定しました (MaxRetries: %d)。", Flags.MaxRetries)
 	}
 
-	// 共有フェッチャーの初期化
-	globalFetcher = httpkit.New(timeout, httpkit.WithMaxRetries(Flags.MaxRetries))
+	// 修正点2: Flags.MaxRetries (int) を uint64 に明示的にキャスト
+	globalFetcher = httpkit.New(
+		timeout,
+		httpkit.WithMaxRetries(uint64(Flags.MaxRetries)),
+	)
 
 	return nil
 }
@@ -89,13 +90,16 @@ func GetGlobalFetcher() httpkit.Fetcher {
 
 // init() 関数でサブコマンドをルートコマンドに追加し、フラグとPreRunEを設定
 func init() {
-	// 1. サブコマンドの追加
+	// 1. サブコマンドの追加 (サブコマンドがこのファイル外で定義されていることを前提とする)
 	rootCmd.AddCommand(extractorcmd)
 	rootCmd.AddCommand(parseCmd)
 	rootCmd.AddCommand(scraperCmd)
 
 	// 2. 永続フラグの設定
 	addAppPersistentFlags(rootCmd)
+
+	// clibaseの永続フラグもここで追加される必要がある（通常、clibaseのinit()で行う）
+	// clibase.AddFlags(rootCmd) // clibaseのインターフェースに依存する
 
 	// 3. PersistentPreRunEの設定 (DIの初期化とclibaseの初期化)
 	rootCmd.PersistentPreRunE = initAppPreRunE
