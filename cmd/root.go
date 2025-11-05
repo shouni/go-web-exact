@@ -89,9 +89,9 @@ func GetGlobalFetcher() httpkit.Fetcher {
 // init() 関数でサブコマンドをルートコマンドに追加し、フラグとPreRunEを設定
 func init() {
 	// 1. サブコマンドの追加
-	rootCmd.AddCommand(extractorcmd) // (旧 extractCmd)
+	rootCmd.AddCommand(extractorcmd)
 	rootCmd.AddCommand(parseCmd)
-	rootCmd.AddCommand(scrapeCmd)
+	rootCmd.AddCommand(scraperCmd)
 
 	// 2. 永続フラグの設定
 	addAppPersistentFlags(rootCmd)

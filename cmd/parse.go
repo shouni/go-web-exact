@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"github.com/mmcdole/gofeed"
-	"github.com/shouni/go-http-kit/pkg/httpkit" // *httpkit.Client にダウンキャストするため必要
+	"github.com/shouni/go-http-kit/pkg/httpkit"
 	"github.com/spf13/cobra"
 
-	// ユーザーの記憶にある package feed (parser.go) を利用します
 	"github.com/shouni/go-web-exact/v2/pkg/feed"
 )
 
@@ -47,14 +46,11 @@ var parseCmd = &cobra.Command{
 
 		// Flags.TimeoutSec は cmd/root.go で定義されています
 		// 全体タイムアウトを設定: クライアントタイムアウトの2倍 (extractCmdと統一)
-		// 💡 修正点1: intのオーバーフローを防ぐため、time.Durationにキャストしてから乗算する
 		overallTimeout := time.Duration(Flags.TimeoutSec) * overallFeedTimeoutFactor * time.Second
 		if Flags.TimeoutSec == 0 {
-			// 💡 修正点2: 新しいグローバル定数 DefaultOverallTimeout を参照する
 			overallTimeout = DefaultOverallTimeout
 		}
 
-		// 💡 修正点3: log.Printfの改行コードを削除し、一貫性を保つ
 		log.Printf("処理対象フィードURL: %s (全体タイムアウト: %s)", feedURL, overallTimeout)
 
 		// 1. 依存性の初期化
@@ -64,7 +60,6 @@ var parseCmd = &cobra.Command{
 			return fmt.Errorf("HTTPクライアントの取得に失敗しました")
 		}
 
-		// 💡 修正点5: 記憶されている feed.NewParser のシグネチャ (*httpkit.Client) に合わせるためダウンキャスト
 		client, ok := fetcher.(*httpkit.Client)
 		if !ok {
 			return fmt.Errorf("予期しないHTTPクライアントの実装です: %T。feed.NewParserは*httpkit.Clientを期待します。", fetcher)
@@ -88,7 +83,6 @@ var parseCmd = &cobra.Command{
 		fmt.Printf("合計記事数: %d\n", len(parsedFeed.Items))
 		fmt.Println("-----------------------")
 
-		// 💡 修正点6: 出力フォーマットの一貫性を確保するため、fmt.Printfに統一
 		for i, item := range parsedFeed.Items {
 			fmt.Printf("[%d] %s\n", i+1, item.Title)
 			fmt.Printf("    URL: %s\n", item.Link)

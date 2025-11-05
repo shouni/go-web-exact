@@ -56,7 +56,6 @@ func ensureScheme(rawURL string) (string, error) {
 	return "https://" + rawURL, nil
 }
 
-// 💡 アーキテクチャに関する指摘: DIを推奨。GetGlobalFetcher()への依存はテスト容易性を低下させる。
 var extractorcmd = &cobra.Command{
 	Use:   "extract",
 	Short: "指定されたURLまたは標準入力からWebコンテンツのテキストを取得します",
@@ -68,10 +67,8 @@ var extractorcmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		// overallTimeout の設定: クライアントタイムアウト (Flags.TimeoutSec) の2倍を全体のタイムアウトとします。
-		// 💡 修正点1: intのオーバーフローを防ぐため、time.Durationにキャストしてから乗算する
 		overallTimeout := time.Duration(Flags.TimeoutSec) * 2 * time.Second
 		if Flags.TimeoutSec == 0 {
-			// 💡 修正点2: 新しいグローバル定数 DefaultOverallTimeout を参照する
 			overallTimeout = DefaultOverallTimeout
 		}
 
@@ -102,7 +99,6 @@ var extractorcmd = &cobra.Command{
 		// cmd/root.go で初期化された共有フェッチャーを使用。
 		fetcher := GetGlobalFetcher()
 		if fetcher == nil {
-			// 💡 修正点3: エラーメッセージを抽象化
 			return fmt.Errorf("HTTPクライアントの取得に失敗しました")
 		}
 
@@ -115,7 +111,6 @@ var extractorcmd = &cobra.Command{
 		// 4. メインロジックの実行
 		text, isBodyExtracted, err := runExtractionPipeline(processedURL, extractor, overallTimeout)
 		if err != nil {
-			// 💡 修正点4: エラーメッセージに processedURL 情報を含める
 			return fmt.Errorf("コンテンツ抽出パイプラインの実行エラー (URL: %s): %w", processedURL, err)
 		}
 

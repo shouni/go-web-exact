@@ -23,18 +23,14 @@ var (
 // runScrapePipeline は、並列スクレイピングを実行するメインロジックです。
 func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency int) {
 
-	// 1. Scraperの初期化 (記憶された NewParallelScraper を利用)
-	// NOTE: scraper パッケージ内で DefaultMaxConcurrency をチェックしているため、ここでは NewParallelScraper に渡すだけで良い。
+	// 1. Scraperの初期化 (NewParallelScraper を利用)
 	scraper := scraper.NewParallelScraper(extractor, concurrency)
 
-	// 2. タイムアウト設定は、個々のリクエストではなく、全体の処理に適用します。
-	// extractCmdと統一するため、クライアントタイムアウト (Flags.TimeoutSec) の2倍を全体のタイムアウトとします。
-
-	// 💡 修正点1: intのオーバーフローを防ぐため、time.Durationにキャストしてから乗算する
+	// 2. タイムアウト設定: クライアントタイムアウトの2倍を全体のタイムアウトとします。
 	overallTimeout := time.Duration(Flags.TimeoutSec) * 2 * time.Second
 	if Flags.TimeoutSec == 0 {
-		// 💡 修正点2: 新しいグローバル定数 DefaultOverallTimeout を参照する
-		overallTimeout = DefaultOverallTimeout
+		// NOTE: ここでは、ルートコマンドのデフォルト値(30秒)が適用されていると仮定し、暫定的に30秒の2倍(60秒)とする。
+		overallTimeout = time.Duration(30) * 2 * time.Second
 	}
 
 	// 3. 全体処理のコンテキストを設定
@@ -42,7 +38,7 @@ func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency 
 	defer cancel()
 
 	log.Printf("並列スクレイピング開始 (対象URL数: %d, 最大同時実行数: %d, 全体タイムアウト: %s)\n",
-		len(urls), scraper.DefaultMaxConcurrency, overallTimeout) // scraper.DefaultMaxConcurrency は定数なので、concurrency 変数を使っても良い
+		len(urls), concurrency, overallTimeout)
 
 	// 4. メインロジックの実行
 	results := scraper.ScrapeInParallel(ctx, urls)
@@ -76,8 +72,9 @@ func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency 
 	fmt.Printf("完了: 成功 %d 件, 失敗 %d 件\n", successCount, errorCount)
 }
 
-var scrapeCmd = &cobra.Command{
-	Use:   "scrape",
+// 💡 scrapeCmd から scraperCmd に名称変更し、Useフィールドを "scraper" に変更
+var scraperCmd = &cobra.Command{
+	Use:   "scraper",
 	Short: "複数のURLを並列で処理し、コンテンツを抽出します",
 	Long:  `--urls フラグでカンマ区切りのURLリストを受け取るか、標準入力からURLを一行ずつ読み込み、指定された最大同時実行数で並列抽出を実行します。`,
 	Args:  cobra.NoArgs, // 位置引数は取らない
@@ -128,13 +125,13 @@ var scrapeCmd = &cobra.Command{
 
 func init() {
 	// --urls フラグ: カンマ区切りのURLリスト
-	scrapeCmd.Flags().StringVarP(&inputURLs, "urls", "u", "",
+	scraperCmd.Flags().StringVarP(&inputURLs, "urls", "u", "",
 		"抽出対象のカンマ区切りURLリスト (例: url1,url2,url3)")
 
 	// --concurrency フラグ: 並列実行数の指定
-	scrapeCmd.Flags().IntVarP(&concurrency, "concurrency", "c",
+	scraperCmd.Flags().IntVarP(&concurrency, "concurrency", "c",
 		scraper.DefaultMaxConcurrency,
 		fmt.Sprintf("最大並列実行数 (デフォルト: %d)", scraper.DefaultMaxConcurrency))
 
-	// NOTE: --urls フラグは必須ではありません。標準入力からの入力も許可します。
+	// NOTE: このコマンドを rootCmd に追加するには、root.goで AddCommand(scraperCmd) を呼び出す必要があります。
 }
