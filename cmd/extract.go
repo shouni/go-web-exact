@@ -15,6 +15,9 @@ import (
 
 var rawUrl string
 
+// 💡 修正点1: マジックナンバーを定数化
+const defaultOverallTimeoutIfClientTimeoutIsZero = 20 * time.Second
+
 // runExtractionPipeline は、Webコンテンツの抽出を実行するメインロジックです。
 func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallTimeout time.Duration) (text string, isBodyExtracted bool, err error) {
 	// 1. 全体処理のコンテキストを設定
@@ -50,7 +53,7 @@ func ensureScheme(rawURL string) (string, error) {
 	}
 
 	// 3. スキームがない場合、HTTPSをデフォルトとして付与
-	// 💡 補足: スキームなしで入力された場合、HTTPSを優先します。HTTPを意図する場合は明示的に http:// を付与する必要があります。
+	// スキームなしで入力された場合、HTTPSを優先します。HTTPを意図する場合は明示的に http:// を付与する必要があります。
 	return "https://" + rawURL, nil
 }
 
@@ -61,11 +64,11 @@ var extractCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		// overallTimeout の設定: クライアントタイムアウト (Flags.TimeoutSec) の2倍を全体のタイムアウトとします。
-		// 💡 修正点1: 計算式を簡素化 (行 68)
+		// 💡 修正点2: 不要なコメントを削除し、計算式を簡素化 (行 68)
 		overallTimeout := time.Duration(Flags.TimeoutSec*2) * time.Second
 		if Flags.TimeoutSec == 0 {
-			// 0秒が設定された場合の防御的な設定
-			overallTimeout = 20 * time.Second
+			// 💡 修正点3: マジックナンバーを定数に置き換え (行 70)
+			overallTimeout = defaultOverallTimeoutIfClientTimeoutIsZero
 		}
 
 		// 1. 処理対象URLの決定 (フラグ優先)
@@ -107,7 +110,8 @@ var extractCmd = &cobra.Command{
 		// 4. メインロジックの実行
 		text, isBodyExtracted, err := runExtractionPipeline(processedURL, extractor, overallTimeout)
 		if err != nil {
-			return fmt.Errorf("コンテンツ抽出パイプラインの実行エラー: %w", err)
+			// 💡 修正点4: エラーメッセージに processedURL 情報を含める (行 108)
+			return fmt.Errorf("コンテンツ抽出パイプラインの実行エラー (URL: %s): %w", processedURL, err)
 		}
 
 		// 5. 結果の出力

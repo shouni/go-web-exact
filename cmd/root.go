@@ -18,8 +18,8 @@ const (
 // GlobalFlags はこのアプリケーション固有の永続フラグを保持
 // clibase.Flags は clibase 共通フラグ（Verbose, ConfigFile）を保持
 type AppFlags struct {
-	TimeoutSec int // --timeout タイムアウト
-	MaxRetries int // 💡 修正点1: リトライ回数を保持するフィールドを追加
+	TimeoutSec int // --timeout タイムアウト 💡 修正点1: 不要なコメントを削除
+	MaxRetries int
 }
 
 var Flags AppFlags // アプリケーション固有フラグにアクセスするためのグローバル変数
@@ -29,7 +29,6 @@ var globalFetcher httpkit.Fetcher
 
 // addAppPersistentFlags は、アプリケーション固有の永続フラグをルートコマンドに追加します。
 func addAppPersistentFlags(rootCmd *cobra.Command) {
-	// TimeoutSec のバインド
 	rootCmd.PersistentFlags().IntVar(
 		&Flags.TimeoutSec,
 		"timeout",
@@ -37,7 +36,7 @@ func addAppPersistentFlags(rootCmd *cobra.Command) {
 		"HTTPリクエストのタイムアウト時間（秒）",
 	)
 
-	// 💡 修正点2: --max-retries フラグを追加
+	// 💡 修正点2: 不要なコメントを削除
 	rootCmd.PersistentFlags().IntVar(
 		&Flags.MaxRetries,
 		"max-retries",
@@ -52,10 +51,10 @@ func initAppPreRunE(cmd *cobra.Command, args []string) error {
 
 	if clibase.Flags.Verbose {
 		log.Printf("HTTPクライアントのタイムアウトを設定しました (Timeout: %s)。", timeout)
-		log.Printf("HTTPクライアントのリトライ回数を設定しました (MaxRetries: %d)。", Flags.MaxRetries) // ログ追加
+		log.Printf("HTTPクライアントのリトライ回数を設定しました (MaxRetries: %d)。", Flags.MaxRetries)
 	}
 
-	// 💡 修正点3: Flags.MaxRetries を使用して httpkit.New を初期化
+	// 💡 修正点3: 不要なコメントを削除
 	globalFetcher = httpkit.New(timeout, httpkit.WithMaxRetries(Flags.MaxRetries))
 
 	return nil
