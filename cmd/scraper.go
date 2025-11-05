@@ -148,6 +148,4 @@ func init() {
 	scraperCmd.Flags().IntVarP(&concurrency, "concurrency", "c",
 		scraper.DefaultMaxConcurrency,
 		fmt.Sprintf("最大並列実行数 (デフォルト: %d)", scraper.DefaultMaxConcurrency))
-
-	// NOTE: このコマンドを rootCmd に追加するには、root.goで AddCommand(scraperCmd) を呼び出す必要があります。
 }
