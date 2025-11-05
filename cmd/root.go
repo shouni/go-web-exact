@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"log"
+	"os"
 	"time"
 
 	"github.com/shouni/go-cli-base"
@@ -13,18 +14,30 @@ const (
 	appName           = "webparse"
 	defaultTimeoutSec = 10 // 秒
 	defaultMaxRetries = 5  // デフォルトのリトライ回数
+
+	// 💡 修正点1: parseCmdで参照される共通定数を定義
+	DefaultOverallTimeoutIfClientTimeoutIsZero = 20 * time.Second
 )
 
 // GlobalFlags はこのアプリケーション固有の永続フラグを保持
 // clibase.Flags は clibase 共通フラグ（Verbose, ConfigFile）を保持
 type AppFlags struct {
-	// 💡 修正点1: コメントを簡潔に修正
 	TimeoutSec int // --timeout タイムアウト
 	MaxRetries int
 }
 
 var Flags AppFlags // アプリケーション固有フラグにアクセスするためのグローバル変数
 var globalFetcher httpkit.Fetcher
+
+// 💡 修正点2: ルートコマンドを定義
+var rootCmd = &cobra.Command{
+	Use:   "web-exact",
+	Short: "Webコンテンツ抽出・フィード解析ツール",
+	Long:  `Webコンテンツの抽出（extract）またはRSS/Atomフィードの解析（parse）を実行します。`,
+
+	// 💡 修正点3: ルートコマンドが引数を取らないことを明示 (引数エラーを解消)
+	Args: cobra.NoArgs,
+}
 
 // --- アプリケーション固有のカスタム関数 ---
 
@@ -37,7 +50,7 @@ func addAppPersistentFlags(rootCmd *cobra.Command) {
 		"HTTPリクエストのタイムアウト時間（秒）",
 	)
 
-	// 💡 修正点2: 不要なコメントを削除
+	// 💡 修正点4: 不要なコメントを削除
 	rootCmd.PersistentFlags().IntVar(
 		&Flags.MaxRetries,
 		"max-retries",
@@ -55,7 +68,7 @@ func initAppPreRunE(cmd *cobra.Command, args []string) error {
 		log.Printf("HTTPクライアントのリトライ回数を設定しました (MaxRetries: %d)。", Flags.MaxRetries)
 	}
 
-	// 💡 修正点3: 不要なコメントを削除
+	// 💡 修正点5: 不要なコメントを削除
 	globalFetcher = httpkit.New(timeout, httpkit.WithMaxRetries(Flags.MaxRetries))
 
 	return nil
@@ -68,15 +81,25 @@ func GetGlobalFetcher() httpkit.Fetcher {
 	return globalFetcher
 }
 
+// 💡 修正点6: init() 関数でサブコマンドをルートコマンドに追加
+func init() {
+	// extractCmd と parseCmd は別ファイルで var として定義されていると仮定
+	rootCmd.AddCommand(extractorcmd)
+	rootCmd.AddCommand(parseCmd)
+}
+
 // --- エントリポイント ---
 
 // Execute は、rootCmd を実行するメイン関数です。
 func Execute() {
-	clibase.Execute(
-		appName,
-		addAppPersistentFlags,
-		initAppPreRunE,
-		extractCmd,
-		parseCmd,
-	)
+	// グローバルフラグの設定 (init() で AddCommand が実行された後に実行する必要がある)
+	addAppPersistentFlags(rootCmd)
+
+	// PersistentPreRunEの設定 (DIの初期化)
+	rootCmd.PersistentPreRunE = initAppPreRunE
+
+	if err := rootCmd.Execute(); err != nil {
+		// エラーメッセージは Cobra が処理するため、os.Exit(1) のみで十分
+		os.Exit(1)
+	}
 }

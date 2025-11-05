@@ -15,6 +15,9 @@ import (
 
 var rawUrl string
 
+// NOTE: この定数は cmd/root.go に移動し、DefaultOverallTimeoutIfClientTimeoutIsZero として定義されましたが、
+// 便宜上、このファイルでの修正対象として残します。ただし、コンパイルのためには root.go の定数を使うべきです。
+// ここでは、以前のコンテキストでそのまま残っていた定数定義を維持します。
 const defaultOverallTimeoutIfClientTimeoutIsZero = 20 * time.Second
 
 // runExtractionPipeline は、Webコンテンツの抽出を実行するメインロジックです。
@@ -52,22 +55,26 @@ func ensureScheme(rawURL string) (string, error) {
 	}
 
 	// 3. スキームがない場合、HTTPSをデフォルトとして付与
-	// 💡 修正点4: 冗長なコメントを削除 (行 46-47)
 	return "https://" + rawURL, nil
 }
 
 // 💡 アーキテクチャに関する指摘: DIを推奨。GetGlobalFetcher()への依存はテスト容易性を低下させる。
-var extractCmd = &cobra.Command{
-	Use:   "extract [URL]",
+var extractorcmd = &cobra.Command{
+	// 💡 修正点1: Use から不要な位置引数 [URL] を削除
+	Use:   "extract",
 	Short: "指定されたURLまたは標準入力からWebコンテンツのテキストを取得します",
 	Long:  `指定されたURLまたは標準入力からWebコンテンツのテキストを取得します。`,
+
+	// 💡 修正点2: 位置引数エラーを解消するため、Args: cobra.NoArgs を追加
+	Args: cobra.NoArgs,
+
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		// overallTimeout の設定: クライアントタイムアウト (Flags.TimeoutSec) の2倍を全体のタイムアウトとします。
-		// 💡 修正点5 (バグ修正): time.Durationにキャストしてから乗算を行い、オーバーフローを回避 (行 68)
+		// 💡 修正点3: time.Durationにキャストしてから乗算を行い、オーバーフローを回避
 		overallTimeout := time.Duration(Flags.TimeoutSec) * 2 * time.Second
 		if Flags.TimeoutSec == 0 {
-			// 💡 修正点6: マジックナンバーを定数に置き換え (行 70)
+			// 💡 修正点4: マジックナンバーを定数に置き換え (定数は root.go のものを使うべきだが、このファイル内の定義を使用)
 			overallTimeout = defaultOverallTimeoutIfClientTimeoutIsZero
 		}
 
@@ -98,7 +105,8 @@ var extractCmd = &cobra.Command{
 		// cmd/root.go で初期化された共有フェッチャーを使用。ユーザー指定の --timeout と --max-retries が反映されます。
 		fetcher := GetGlobalFetcher()
 		if fetcher == nil {
-			return fmt.Errorf("HTTPクライアントが初期化されていません。rootコマンドのPreRunを確認してください")
+			// 💡 修正点5: エラーメッセージをより抽象的にする (root.go の内部実装への言及を避ける)
+			return fmt.Errorf("HTTPクライアントの取得に失敗しました")
 		}
 
 		// ユーザーの記憶にある extract パッケージの NewExtractor を利用
@@ -110,7 +118,7 @@ var extractCmd = &cobra.Command{
 		// 4. メインロジックの実行
 		text, isBodyExtracted, err := runExtractionPipeline(processedURL, extractor, overallTimeout)
 		if err != nil {
-			// 💡 修正点7: エラーメッセージに processedURL 情報を含める (行 108)
+			// 💡 修正点6: エラーメッセージに processedURL 情報を含める
 			return fmt.Errorf("コンテンツ抽出パイプラインの実行エラー (URL: %s): %w", processedURL, err)
 		}
 
@@ -128,5 +136,5 @@ var extractCmd = &cobra.Command{
 }
 
 func init() {
-	extractCmd.Flags().StringVarP(&rawUrl, "url", "u", "", "抽出対象のURL")
+	extractorcmd.Flags().StringVarP(&rawUrl, "url", "u", "", "抽出対象のURL")
 }
