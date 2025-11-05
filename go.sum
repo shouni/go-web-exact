@@ -32,8 +32,8 @@ github.com/rivo/uniseg v0.4.7/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUc
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/shouni/go-cli-base v1.0.5 h1:Wn09yji6/DIesFwo81/xlzWaJMqZVG07gXoRxMIre4c=
 github.com/shouni/go-cli-base v1.0.5/go.mod h1:8E4ahg7/LC3cG5zSBR4u/s+ugqrXxEsqXVWGbFlE1P8=
-github.com/shouni/go-http-kit v1.0.5 h1:yvL5BjSS3O3itbyuc9Z/rt8+vaHyEirQ/D3fdK6+Tqg=
-github.com/shouni/go-http-kit v1.0.5/go.mod h1:5QsFXLGs9kZ/ZOCLPC//GIr6tSLEC0cEM6mMcVHvDuM=
+github.com/shouni/go-http-kit v1.0.6 h1:INciTnBw5OgerZzhnvfTP7uXopKm1KHzG5fLkl4k6kA=
+github.com/shouni/go-http-kit v1.0.6/go.mod h1:CFk1CJbTqRskKB70qbn+q2fVyH9zXNp9KWQuWp/lwFY=
 github.com/shouni/go-utils v1.0.7 h1:tLDVile32/z/Ez9pKWpdYMYYW4hu0ZhIOIUhqmPi8J0=
 github.com/shouni/go-utils v1.0.7/go.mod h1:dQxOuVTvWFHWEH/G6izteLh+tubkI5Sl1jpDWlCSkBU=
 github.com/shouni/go-web-exact v1.0.8 h1:xstiKFFVujPzqIuvR+d4qAKAi5wgHN0+5VBiL/1vh5k=
