@@ -21,14 +21,11 @@ var (
 // runParsePipeline はフィードの取得と解析を実行するメインロジックです。
 func runParsePipeline(feedURL string, fetcher feed.Fetcher) error {
 
-	// 1. 全体タイムアウトの設定 (修正点2に対応)
-	// クライアントタイムアウト (Flags.TimeoutSec) を基に全体のタイムアウトを計算し、一貫性を保つ。
+	// 1. 全体タイムアウトの設定
 	clientTimeout := time.Duration(Flags.TimeoutSec) * time.Second
 	if Flags.TimeoutSec == 0 {
-		// Flags.TimeoutSecが0の場合、ルートコマンドのデフォルト値(defaultTimeoutSec=10)が適用されている
 		clientTimeout = defaultTimeoutSec * time.Second
 	}
-	// 全体のタイムアウトはクライアントタイムアウトの overallFeedTimeoutFactor 倍
 	overallTimeout := clientTimeout * overallFeedTimeoutFactor
 
 	// 2. コンテキストの設定
@@ -38,7 +35,6 @@ func runParsePipeline(feedURL string, fetcher feed.Fetcher) error {
 	log.Printf("フィード解析開始 (URL: %s, 全体タイムアウト: %s)\n", feedURL, overallTimeout)
 
 	// 3. フィードパーサーの初期化
-	// 修正点1に対応: fetcher (httpkit.Fetcher) は feed.Fetcher インターフェースを満たすため、直接渡す。
 	parser := feed.NewParser(fetcher)
 
 	// 4. フィードの取得とパースを実行
@@ -51,7 +47,15 @@ func runParsePipeline(feedURL string, fetcher feed.Fetcher) error {
 	fmt.Printf("\n--- フィード解析結果 ---\n")
 	fmt.Printf("タイトル: %s\n", rssFeed.Title)
 	fmt.Printf("URL: %s\n", rssFeed.Link)
-	fmt.Printf("更新日時: %s\n", rssFeed.UpdatedParsed.Local().Format("2006/01/02 15:04:05"))
+
+	// 💡 修正: UpdatedParsed が nil でないかチェック (パニック対策)
+	if rssFeed.UpdatedParsed != nil {
+		fmt.Printf("更新日時: %s\n", rssFeed.UpdatedParsed.Local().Format("2006/01/02 15:04:05"))
+	} else {
+		// 更新日時がない場合はその旨を出力
+		fmt.Printf("更新日時: (情報なし)\n")
+	}
+
 	fmt.Printf("記事数: %d\n", len(rssFeed.Items))
 	fmt.Println("----------------------")
 
@@ -59,6 +63,8 @@ func runParsePipeline(feedURL string, fetcher feed.Fetcher) error {
 	for i, item := range rssFeed.Items {
 		fmt.Printf("[%d] %s\n", i+1, item.Title)
 		fmt.Printf("    - リンク: %s\n", item.Link)
+
+		// 💡 記事の公開日時も nil チェックを追加し、堅牢性を向上
 		if item.PublishedParsed != nil {
 			fmt.Printf("    - 公開: %s\n", item.PublishedParsed.Local().Format("2006/01/02 15:04:05"))
 		}
@@ -93,7 +99,6 @@ var parseCmd = &cobra.Command{
 		}
 
 		// 3. メインロジックの実行
-		// GetGlobalFetcher() が返すのは httpkit.Fetcher (feed.Fetcher を満たす)
 		return runParsePipeline(processedURL, fetcher)
 	},
 }

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"log"
-	"os"
 	"time"
 
 	clibase "github.com/shouni/go-cli-base"
@@ -18,7 +17,7 @@ const (
 	defaultTimeoutSec = 10          // 秒
 	defaultMaxRetries = 5           // デフォルトのリトライ回数
 
-	// 全体処理のタイムアウト定数 (parseCmd, scrapeCmd で利用)
+	// 全体処理のタイムアウト定数 (parseCmd, scraperCmd で利用)
 	DefaultOverallTimeout = 20 * time.Second
 )
 
@@ -33,17 +32,15 @@ type AppFlags struct {
 var Flags AppFlags                // アプリケーション固有フラグにアクセスするためのグローバル変数
 var globalFetcher extract.Fetcher // または feed.Fetcher (両方満たすため)
 
-// 💡 ルートコマンドの定義
+// 💡 ルートコマンドの定義 (clibaseがルートコマンドを生成するため、UseとLongのみ残し、他は削除)
 var rootCmd = &cobra.Command{
 	Use:   appName,
 	Short: "Webコンテンツ抽出、フィード解析、並列スクレイピングツール",
-	Long:  `Webコンテンツの抽出（extract）、RSS/Atomフィードの解析（parse）、および複数のURLの並列抽出（scrape）を実行します。`,
-
-	// 重要な修正: ルートコマンドは引数を取らないことを明示し、引数エラーを解消
-	Args: cobra.NoArgs,
+	Long:  `Webコンテンツの抽出（extract）、RSS/Atomフィードの解析（parse）、および複数のURLの並列抽出（scraper）を実行します。`,
+	// Args, PersistentPreRunE, init() のロジックは clibase に任せる
 }
 
-// --- 初期化とロジック ---
+// --- 初期化とロジック (clibaseへのコールバックとして利用) ---
 
 // addAppPersistentFlags は、アプリケーション固有の永続フラグをルートコマンドに追加します。
 func addAppPersistentFlags(rootCmd *cobra.Command) {
@@ -62,22 +59,22 @@ func addAppPersistentFlags(rootCmd *cobra.Command) {
 }
 
 // initAppPreRunE は、clibase共通処理の後に実行される、アプリケーション固有のPersistentPreRunEです。
+// NOTE: clibaseの PersistentPreRunE チェーンにより、clibase.Flags.Verbose はこの関数実行前に設定済み
 func initAppPreRunE(cmd *cobra.Command, args []string) error {
-	// clibase の初期化ロジック (Verboseフラグの処理など) を実行
-	// clibase.Execute() を使わないため、Cobraの標準的な方法で初期化処理を呼び出す
-	if err := clibase.Init(cmd, args); err != nil {
-		return err
-	}
 
 	timeout := time.Duration(Flags.TimeoutSec) * time.Second
 
+	// clibase.Flags の利用
 	if clibase.Flags.Verbose {
 		log.Printf("HTTPクライアントのタイムアウトを設定しました (Timeout: %s)。", timeout)
 		log.Printf("HTTPクライアントのリトライ回数を設定しました (MaxRetries: %d)。", Flags.MaxRetries)
 	}
 
 	// 共有フェッチャーの初期化
-	globalFetcher = httpkit.New(timeout, httpkit.WithMaxRetries(Flags.MaxRetries))
+	globalFetcher = httpkit.New(
+		timeout,
+		httpkit.WithMaxRetries(uint64(Flags.MaxRetries)),
+	)
 
 	return nil
 }
@@ -87,26 +84,22 @@ func GetGlobalFetcher() httpkit.Fetcher {
 	return globalFetcher
 }
 
-// init() 関数でサブコマンドをルートコマンドに追加し、フラグとPreRunEを設定
-func init() {
-	// 1. サブコマンドの追加
-	rootCmd.AddCommand(extractorcmd)
-	rootCmd.AddCommand(parseCmd)
-	rootCmd.AddCommand(scraperCmd)
-
-	// 2. 永続フラグの設定
-	addAppPersistentFlags(rootCmd)
-
-	// 3. PersistentPreRunEの設定 (DIの初期化とclibaseの初期化)
-	rootCmd.PersistentPreRunE = initAppPreRunE
-}
-
 // --- エントリポイント ---
 
-// Execute は、rootCmd を実行するメイン関数です。
+// Execute は、rootCmd を実行するメイン関数です。clibaseのExecuteを使用する。
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		// エラーメッセージは Cobra が処理するため、os.Exit(1) のみで十分
-		os.Exit(1)
-	}
+	// clibase.Execute を使用して、アプリケーションの初期化、フラグ設定、サブコマンドの登録を一括で行う
+	clibase.Execute(
+		appName,
+		addAppPersistentFlags, // カスタムフラグの追加コールバック
+		initAppPreRunE,        // カスタムPersistentPreRunEコールバック
+		// サブコマンドのリスト (これらは他のファイルで定義されている必要があります)
+		extractorcmd,
+		parseCmd,
+		scraperCmd,
+	)
+	// clibase.Execute() の中で os.Exit(1) が処理されるため、ここでは不要
 }
+
+// 💡 注意: clibaseの新しい設計では、init() 関数は不要になりました。
+// 以前の init() 関数の内容は Execute() 関数に移譲されています。
