@@ -26,12 +26,17 @@ func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency 
 	// 1. Scraperの初期化 (NewParallelScraper を利用)
 	scraper := scraper.NewParallelScraper(extractor, concurrency)
 
-	// 2. タイムアウト設定: クライアントタイムアウトの2倍を全体のタイムアウトとします。
-	overallTimeout := time.Duration(Flags.TimeoutSec) * 2 * time.Second
+	// 2. タイムアウト設定: (修正点1に対応)
+	// クライアントタイムアウト(Flags.TimeoutSec)を基に全体のタイムアウトを計算し、一貫性を保つ。
+	var clientTimeout time.Duration
 	if Flags.TimeoutSec == 0 {
-		// NOTE: ここでは、ルートコマンドのデフォルト値(30秒)が適用されていると仮定し、暫定的に30秒の2倍(60秒)とする。
-		overallTimeout = time.Duration(30) * 2 * time.Second
+		// Flags.TimeoutSecが0の場合、ルートコマンドのデフォルト値(defaultTimeoutSec=10)が適用されている
+		clientTimeout = defaultTimeoutSec * time.Second
+	} else {
+		clientTimeout = time.Duration(Flags.TimeoutSec) * time.Second
 	}
+	// extractorCmdと同様に、全体のタイムアウトをクライアントタイムアウトの2倍とする
+	overallTimeout := clientTimeout * 2
 
 	// 3. 全体処理のコンテキストを設定
 	ctx, cancel := context.WithTimeout(context.Background(), overallTimeout)
@@ -72,7 +77,7 @@ func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency 
 	fmt.Printf("完了: 成功 %d 件, 失敗 %d 件\n", successCount, errorCount)
 }
 
-// 💡 scrapeCmd から scraperCmd に名称変更し、Useフィールドを "scraper" に変更
+// scrapeCmd から scraperCmd に名称変更
 var scraperCmd = &cobra.Command{
 	Use:   "scraper",
 	Short: "複数のURLを並列で処理し、コンテンツを抽出します",
@@ -91,24 +96,35 @@ var scraperCmd = &cobra.Command{
 			return fmt.Errorf("Extractorの初期化エラー: %w", err)
 		}
 
-		// 2. 処理対象URLのリストを決定
+		// 2. 処理対象URLのリストを決定 (修正点2に対応: ensureSchemeを適用)
 		var urls []string
+		var rawURLs []string
 
+		// 2-1. フラグからの読み込み
 		if inputURLs != "" {
-			// --urls フラグからURLリストを取得
-			urls = strings.Split(inputURLs, ",")
+			rawURLs = strings.Split(inputURLs, ",")
 		} else {
-			// 標準入力からURLを一行ずつ読み込む
+			// 2-2. 標準入力からの読み込み
 			log.Println("URLが指定されていないため、標準入力からURLを読み込みます (Ctrl+DまたはEOFで終了)...")
 			scanner := bufio.NewScanner(os.Stdin)
 			for scanner.Scan() {
-				url := strings.TrimSpace(scanner.Text())
-				if url != "" {
-					urls = append(urls, url)
-				}
+				rawURLs = append(rawURLs, scanner.Text())
 			}
 			if err := scanner.Err(); err != nil {
 				return fmt.Errorf("標準入力の読み取りエラー: %w", err)
+			}
+		}
+
+		// 2-3. URLスキーム補完とバリデーションの適用
+		for _, u := range rawURLs {
+			u = strings.TrimSpace(u)
+			if u != "" {
+				// 💡 ensureScheme を呼び出す
+				processed, err := ensureScheme(u)
+				if err != nil {
+					return fmt.Errorf("URLスキームの処理エラー (%s): %w", u, err)
+				}
+				urls = append(urls, processed)
 			}
 		}
 
