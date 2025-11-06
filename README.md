@@ -5,7 +5,7 @@
 [![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/shouni/go-web-exact)](https://github.com/shouni/go-web-exact/tags)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-このプロジェクトは、Webコンテンツの**高精度なメインコンテンツ抽出**、**フィード解析**、および**並列スクレイピング**に特化した多機能ツール/ライブラリです。
+このプロジェクトは、Webコンテンツの**高精度なメインコンテンツ抽出**、**フィード解析**、および**並列スクレイピング**に特化した多機能ライブラリです。
 
 -----
 
@@ -52,19 +52,41 @@ type Fetcher interface {
 ```go
 package main
 
-// ... 必要な import ...
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/shouni/go-web-exact/v2/pkg/extract"
+	// 依存性注入のための Fetcher 実装 (例: go-http-kit) のインポートを想定
+)
 
 func main() {
-    // ... Fetcher の初期化 ... 
+    ctx := context.Background()
+    url := "https://example.com/article"
+    
+    // 1. Fetcher の初期化 (外部ライブラリ/カスタムクライアントを想定)
+    // ⚠️ 例: fetcher := httpkit.New(10 * time.Second)
+    var fetcher extract.Fetcher // 抽象的な Fetcher 実装を想定
     
     // 2. Extractor を初期化 (FetcherをDI)
     extractor, err := extract.NewExtractor(fetcher)
-    // ... (エラー処理) ...
+    if err != nil {
+       log.Fatalf("Extractorの初期化エラー: %v", err)
+    }
 
-    // 4. 抽出の実行
+    // 3. 抽出の実行
     text, hasBody, err := extractor.FetchAndExtractText(ctx, url)
 
-    // ... (結果の出力) ...
+    // 4. 結果の出力
+    if err != nil {
+       log.Fatalf("抽出エラー: %v", err)
+    }
+    if hasBody {
+       fmt.Printf("抽出成功 (長さ: %d): %s\n", len(text), text[:200])
+    } else {
+       fmt.Println("本文は見つかりませんでした。")
+    }
 }
 ```
 
@@ -75,20 +97,32 @@ func main() {
 ```go
 package main
 
-// ... 必要な import ...
-import "github.com/shouni/go-web-exact/v2/pkg/scraper"
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/shouni/go-web-exact/v2/pkg/extract"
+    "github.com/shouni/go-web-exact/v2/pkg/scraper"
+    // types パッケージのインポートは不要 (ScraperInParallelの戻り値は公開型)
+)
 
 func main() {
-    // ... Extractor の初期化 ... 
+    ctx := context.Background()
+    // ⚠️ Fetcher の初期化 (前述の例と同様)
+    var fetcher extract.Fetcher 
     
-    urlsToScrape := []string{"url1", "url2", "url3"}
+    extractor, _ := extract.NewExtractor(fetcher)
+    
+    urlsToScrape := []string{"url1", "url2", "url3", "url4", "url5"}
     
     // 1. ParallelScraperを初期化 (最大同時実行数: 5)
     maxConcurrency := 5
     parallelScraper := scraper.NewParallelScraper(extractor, maxConcurrency)
 
     // 2. 並列抽出を実行
-    results := parallelScraper.ScrapeInParallel(context.Background(), urlsToScrape)
+    log.Println("並列スクレイピング開始...")
+    results := parallelScraper.ScrapeInParallel(ctx, urlsToScrape)
     
     // 3. 結果の処理 (results は []types.URLResult です)
     for _, res := range results {
