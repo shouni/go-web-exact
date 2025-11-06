@@ -10,7 +10,7 @@ import (
 )
 
 // DefaultMaxConcurrency は、並列スクレイピングのデフォルトの最大同時実行数を定義します。
-const DefaultMaxConcurrency = 10
+const DefaultMaxConcurrency = 6
 
 // Scraper はWebコンテンツの抽出機能を提供するインターフェースです。
 type Scraper interface {

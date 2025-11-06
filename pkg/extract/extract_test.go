@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	// 実際のパッケージのインポートパスに修正してください
 	"github.com/shouni/go-web-exact/v2/pkg/extract"
+	"github.com/stretchr/testify/assert"
 )
 
 // ======================================================================

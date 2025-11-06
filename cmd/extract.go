@@ -5,19 +5,12 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"time"
 
 	"github.com/shouni/go-web-exact/v2/pkg/extract"
 	"github.com/spf13/cobra"
 )
-
-// コマンドラインフラグ変数を定義
-var rawUrl string
-
-// NOTE: 以前このファイルにあった定数 defaultOverallTimeoutIfClientTimeoutIsZero は削除されました。
-// 代わりに、cmd/root.go で定義された DefaultOverallTimeout を使用します。
 
 // runExtractionPipeline は、Webコンテンツの抽出を実行するメインロジックです。
 func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallTimeout time.Duration) (text string, isBodyExtracted bool, err error) {
@@ -35,28 +28,7 @@ func runExtractionPipeline(rawURL string, extractor *extract.Extractor, overallT
 	return text, isBodyExtracted, nil
 }
 
-// ensureScheme は、URLのスキームが存在しない場合に https:// を補完します。
-func ensureScheme(rawURL string) (string, error) {
-	// 1. まず現在のURLをパース
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		return "", fmt.Errorf("URLのパースエラー: %w", err)
-	}
-
-	// 2. スキームが既に存在する場合のチェック
-	if parsedURL.Scheme != "" {
-		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-			return "", fmt.Errorf("無効なURLスキームです。httpまたはhttpsを指定してください: %s", rawURL)
-		}
-		// 既存のスキームを尊重
-		return rawURL, nil
-	}
-
-	// 3. スキームがない場合、HTTPSをデフォルトとして付与
-	return "https://" + rawURL, nil
-}
-
-var extractorcmd = &cobra.Command{
+var extracCommand = &cobra.Command{
 	Use:   "extract",
 	Short: "指定されたURLまたは標準入力からWebコンテンツのテキストを取得します",
 	Long:  `指定されたURLまたは標準入力からWebコンテンツのテキストを取得します。`,
@@ -66,14 +38,8 @@ var extractorcmd = &cobra.Command{
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		// overallTimeout の設定: クライアントタイムアウト (Flags.TimeoutSec) の2倍を全体のタイムアウトとします。
-		overallTimeout := time.Duration(Flags.TimeoutSec) * 2 * time.Second
-		if Flags.TimeoutSec == 0 {
-			overallTimeout = DefaultOverallTimeout
-		}
-
 		// 1. 処理対象URLの決定 (フラグ優先)
-		urlToProcess := rawUrl
+		urlToProcess := feedURL
 		if urlToProcess == "" {
 			log.Println("URLが指定されていないため、標準入力からURLを読み込みます...")
 			scanner := bufio.NewScanner(os.Stdin)
@@ -93,23 +59,21 @@ var extractorcmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("URLスキームの処理エラー: %w", err)
 		}
-		log.Printf("処理対象URL: %s (全体タイムアウト: %s)\n", processedURL, overallTimeout)
+		log.Printf("処理対象URL: %s (全体タイムアウト: %s)\n", processedURL, defaultTimeoutSec)
 
 		// 3. 依存性の初期化
-		// cmd/root.go で初期化された共有フェッチャーを使用。
 		fetcher := GetGlobalFetcher()
 		if fetcher == nil {
 			return fmt.Errorf("HTTPクライアントの取得に失敗しました")
 		}
 
-		// ユーザーの記憶にある extract パッケージの NewExtractor を利用
 		extractor, err := extract.NewExtractor(fetcher)
 		if err != nil {
 			return fmt.Errorf("Extractorの初期化エラー: %w", err)
 		}
 
 		// 4. メインロジックの実行
-		text, isBodyExtracted, err := runExtractionPipeline(processedURL, extractor, overallTimeout)
+		text, isBodyExtracted, err := runExtractionPipeline(processedURL, extractor, defaultTimeoutSec)
 		if err != nil {
 			return fmt.Errorf("コンテンツ抽出パイプラインの実行エラー (URL: %s): %w", processedURL, err)
 		}
@@ -128,5 +92,5 @@ var extractorcmd = &cobra.Command{
 }
 
 func init() {
-	extractorcmd.Flags().StringVarP(&rawUrl, "url", "u", "", "抽出対象のURL")
+	extracCommand.Flags().StringVarP(&feedURL, "url", "u", "https://github.com/shouni/go-web-exact", "抽出対象のURL")
 }
