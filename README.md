@@ -113,7 +113,6 @@ func main() {
 | **`pkg/feed`** | **`feed`** | RSS/Atomフィードの取得、パース、データ構造化ロジック。 |
 | **`pkg/scraper`** | **`scraper`** | `extract` パッケージを利用した複数URLの**並列処理**制御ロジック（セマフォ制御）。 |
 | **`pkg/types`** | **`types`** | アプリケーション全体で共有されるデータ構造 (`URLResult`, `TemplateData` など) の定義。 |
-| **`cmd`** | **`cmd`** | CLIコマンド (`extract`, `parse`, `scrape`) の定義と実行ロジック。 |
 
 ### 外部依存パッケージ
 
@@ -128,4 +127,3 @@ func main() {
 ### 📜 ライセンス (License)
 
 このプロジェクトは [MIT License](https://opensource.org/licenses/MIT) の下で公開されています。
-
