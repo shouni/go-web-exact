@@ -16,8 +16,3 @@
 *.a
 /bin/
 
-
-/go-ai-client.iml
-/.idea/misc.xml
-/.idea/modules.xml
-/.idea/vcs.xml
