@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/shouni/go-http-kit/pkg/httpkit"
 	"github.com/shouni/go-web-exact/v2/pkg/extract"
 	"github.com/shouni/go-web-exact/v2/pkg/scraper"
 	"github.com/spf13/cobra"
@@ -81,7 +82,7 @@ var scraperCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		// 1. 依存性の初期化 (Fetcher -> Extractor)
-		fetcher := GetGlobalFetcher()
+		fetcher := httpkit.New(defaultMaxRetries)
 		if fetcher == nil {
 			return fmt.Errorf("HTTPクライアントの取得に失敗しました")
 		}

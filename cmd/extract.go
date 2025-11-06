@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/shouni/go-http-kit/pkg/httpkit"
 	"github.com/shouni/go-web-exact/v2/pkg/extract"
 	"github.com/spf13/cobra"
 )
@@ -62,7 +63,7 @@ var extracCommand = &cobra.Command{
 		log.Printf("処理対象URL: %s (全体タイムアウト: %s)\n", processedURL, defaultTimeoutSec)
 
 		// 3. 依存性の初期化
-		fetcher := GetGlobalFetcher()
+		fetcher := httpkit.New(defaultMaxRetries)
 		if fetcher == nil {
 			return fmt.Errorf("HTTPクライアントの取得に失敗しました")
 		}
