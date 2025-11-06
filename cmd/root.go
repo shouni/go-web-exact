@@ -32,12 +32,15 @@ type AppFlags struct {
 var Flags AppFlags                // アプリケーション固有フラグにアクセスするためのグローバル変数
 var globalFetcher extract.Fetcher // または feed.Fetcher (両方満たすため)
 
-// 💡 ルートコマンドの定義 (clibaseがルートコマンドを生成するため、UseとLongのみ残し、他は削除)
+// コマンドラインフラグ変数
+var (
+	feedURL string
+)
+
 var rootCmd = &cobra.Command{
 	Use:   appName,
 	Short: "Webコンテンツ抽出、フィード解析、並列スクレイピングツール",
 	Long:  `Webコンテンツの抽出（extract）、RSS/Atomフィードの解析（parse）、および複数のURLの並列抽出（scraper）を実行します。`,
-	// Args, PersistentPreRunE, init() のロジックは clibase に任せる
 }
 
 // --- 初期化とロジック (clibaseへのコールバックとして利用) ---
@@ -94,12 +97,8 @@ func Execute() {
 		addAppPersistentFlags, // カスタムフラグの追加コールバック
 		initAppPreRunE,        // カスタムPersistentPreRunEコールバック
 		// サブコマンドのリスト (これらは他のファイルで定義されている必要があります)
-		extractorcmd,
-		parseCmd,
+		extracCommand,
+		parseCommand,
 		scraperCmd,
 	)
-	// clibase.Execute() の中で os.Exit(1) が処理されるため、ここでは不要
 }
-
-// 💡 注意: clibaseの新しい設計では、init() 関数は不要になりました。
-// 以前の init() 関数の内容は Execute() 関数に移譲されています。

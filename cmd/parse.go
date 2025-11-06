@@ -13,10 +13,11 @@ import (
 // フィード解析の全体処理のタイムアウト係数
 const overallFeedTimeoutFactor = 2
 
-// コマンドラインフラグ変数
-var (
-	feedURL string // -u, --url フラグで受け取るフィードURL
-)
+// ParsedFeed は抽出された記事のリンクとタイトル
+type ParsedFeed struct {
+	Link  string
+	Title string
+}
 
 // runParsePipeline はフィードの取得と解析を実行するメインロジックです。
 func runParsePipeline(feedURL string, fetcher feed.Fetcher) error {
@@ -48,7 +49,6 @@ func runParsePipeline(feedURL string, fetcher feed.Fetcher) error {
 	fmt.Printf("タイトル: %s\n", rssFeed.Title)
 	fmt.Printf("URL: %s\n", rssFeed.Link)
 
-	// 💡 修正: UpdatedParsed が nil でないかチェック (パニック対策)
 	if rssFeed.UpdatedParsed != nil {
 		fmt.Printf("更新日時: %s\n", rssFeed.UpdatedParsed.Local().Format("2006/01/02 15:04:05"))
 	} else {
@@ -63,8 +63,6 @@ func runParsePipeline(feedURL string, fetcher feed.Fetcher) error {
 	for i, item := range rssFeed.Items {
 		fmt.Printf("[%d] %s\n", i+1, item.Title)
 		fmt.Printf("    - リンク: %s\n", item.Link)
-
-		// 💡 記事の公開日時も nil チェックを追加し、堅牢性を向上
 		if item.PublishedParsed != nil {
 			fmt.Printf("    - 公開: %s\n", item.PublishedParsed.Local().Format("2006/01/02 15:04:05"))
 		}
@@ -74,7 +72,7 @@ func runParsePipeline(feedURL string, fetcher feed.Fetcher) error {
 	return nil
 }
 
-var parseCmd = &cobra.Command{
+var parseCommand = &cobra.Command{
 	Use:   "parse",
 	Short: "RSS/Atomフィードを取得・解析し、タイトルと記事を一覧表示します",
 	Long:  `指定されたフィードURLからコンテンツを取得し、フィードのタイトルや記事のリンクなどを標準出力に出力します。`,
@@ -104,7 +102,5 @@ var parseCmd = &cobra.Command{
 }
 
 func init() {
-	// -u, --url フラグの定義
-	parseCmd.Flags().StringVarP(&feedURL, "url", "u", "", "解析対象のフィードURL (RSS/Atom)")
-	parseCmd.MarkFlagRequired("url")
+	parseCommand.Flags().StringVarP(&feedURL, "url", "u", "https://news.yahoo.co.jp/rss/categories/it.xml", "解析対象のフィードURL (RSS/Atom)")
 }

@@ -1,13 +1,7 @@
 package cmd
 
 import (
-	"bufio"
-	"context"
 	"fmt"
-	"log"
-	"os"
-	"strings"
-	"time"
 
 	"github.com/shouni/go-web-exact/v2/pkg/extract"
 	"github.com/shouni/go-web-exact/v2/pkg/scraper"
@@ -16,17 +10,17 @@ import (
 
 // コマンドラインフラグ変数を定義
 var (
-	inputURLs   string // --urls フラグで受け取るカンマ区切りのURLリスト
-	concurrency int    // --concurrency フラグで受け取る並列実行数
+	concurrency int // --concurrency フラグで受け取る並列実行数
 )
 
 // runScrapePipeline は、並列スクレイピングを実行するメインロジックです。
 func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency int) {
 
+	/**
 	// 1. Scraperの初期化 (NewParallelScraper を利用)
-	scraper := scraper.NewParallelScraper(extractor, concurrency)
+	parallelScraper := scraper.NewParallelScraper(extractor, concurrency)
 
-	// 2. タイムアウト設定: (修正点1に対応)
+	// 2. タイムアウト設定:
 	// クライアントタイムアウト(Flags.TimeoutSec)を基に全体のタイムアウトを計算し、一貫性を保つ。
 	var clientTimeout time.Duration
 	if Flags.TimeoutSec == 0 {
@@ -44,8 +38,8 @@ func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency 
 	log.Printf("並列スクレイピング開始 (対象URL数: %d, 最大同時実行数: %d, 全体タイムアウト: %s)\n",
 		len(urls), concurrency, overallTimeout)
 
-	// 4. メインロジックの実行
-	results := scraper.ScrapeInParallel(ctx, urls)
+	// 4. メインロジックの実行: scraper.ScrapeInParallel が内部で extractor.FetchAndExtractText を呼び出します
+	results := parallelScraper.parallelScraper(ctx, urls)
 
 	// 5. 結果の出力
 	fmt.Println("--- 並列スクレイピング結果 ---")
@@ -74,13 +68,14 @@ func runScrapePipeline(urls []string, extractor *extract.Extractor, concurrency 
 
 	fmt.Println("-------------------------------")
 	fmt.Printf("完了: 成功 %d 件, 失敗 %d 件\n", successCount, errorCount)
+	*/
 }
 
-// scrapeCmd から scraperCmd に名称変更
+// scraperCmd は、フィードから抽出したURLを並列で処理し、コンテンツを抽出します。
 var scraperCmd = &cobra.Command{
 	Use:   "scraper",
-	Short: "複数のURLを並列で処理し、コンテンツを抽出します",
-	Long:  `--urls フラグでカンマ区切りのURLリストを受け取るか、標準入力からURLを一行ずつ読み込み、指定された最大同時実行数で並列抽出を実行します。`,
+	Short: "RSSフィードから抽出した複数のURLを並列で処理し、コンテンツを抽出します",
+	Long:  `--url フラグで指定されたRSS/Atomフィードを解析し、含まれる記事のURLを抽出し、指定された最大同時実行数で並列抽出を実行します。`,
 	Args:  cobra.NoArgs, // 位置引数は取らない
 
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -90,58 +85,53 @@ var scraperCmd = &cobra.Command{
 		if fetcher == nil {
 			return fmt.Errorf("HTTPクライアントの取得に失敗しました")
 		}
-		extractor, err := extract.NewExtractor(fetcher)
-		if err != nil {
-			return fmt.Errorf("Extractorの初期化エラー: %w", err)
-		}
-
-		// 2. 処理対象URLのリストを決定 (修正点2に対応: ensureSchemeを適用)
-		var urls []string
-		var rawURLs []string
-
-		// 2-1. フラグからの読み込み
-		if inputURLs != "" {
-			rawURLs = strings.Split(inputURLs, ",")
-		} else {
-			// 2-2. 標準入力からの読み込み
-			log.Println("URLが指定されていないため、標準入力からURLを読み込みます (Ctrl+DまたはEOFで終了)...")
-			scanner := bufio.NewScanner(os.Stdin)
-			for scanner.Scan() {
-				rawURLs = append(rawURLs, scanner.Text())
-			}
-			if err := scanner.Err(); err != nil {
-				return fmt.Errorf("標準入力の読み取りエラー: %w", err)
-			}
-		}
-
-		// 2-3. URLスキーム補完とバリデーションの適用
-		for _, u := range rawURLs {
-			u = strings.TrimSpace(u)
-			if u != "" {
-				// 💡 ensureScheme を呼び出す
-				processed, err := ensureScheme(u)
-				if err != nil {
-					return fmt.Errorf("URLスキームの処理エラー (%s): %w", u, err)
-				}
-				urls = append(urls, processed)
-			}
-		}
-
-		if len(urls) == 0 {
-			return fmt.Errorf("処理対象のURLが一つも指定されていません")
-		}
-
-		// 3. メインロジックの実行
-		runScrapePipeline(urls, extractor, concurrency)
+		//// httpkit.Client が feed.Fetcher インターフェースを満たすことを前提とする
+		//parser, err := feed.NewParser(fetcher)
+		//if err != nil {
+		//	return fmt.Errorf("Parserの初期化エラー: %w", err)
+		//}
+		//// httpkit.Client が extract.Fetcher インターフェースを満たすことを前提とする
+		//extractor, err := extract.NewExtractor(fetcher)
+		//if err != nil {
+		//	return fmt.Errorf("Extractorの初期化エラー: %w", err)
+		//}
+		//
+		//// 2. フィード取得のための短時間のコンテキストを設定
+		//ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		//defer cancel()
+		//
+		//// 3. フィードの取得とパースを実行
+		//log.Printf("フィードURLを解析中: %s\n", feedURL)
+		//rssFeed, err := parser.FetchAndParse(ctx, feedURL)
+		//if err != nil {
+		//	return fmt.Errorf("フィードの処理エラー: %w", err)
+		//}
+		//
+		//// 4. RSSフィードから記事のURLを抽出
+		//var urls []string
+		//for _, item := range rssFeed.Items {
+		//	if item.Link != "" {
+		//		urls = append(urls, item.Link)
+		//	}
+		//}
+		//
+		//log.Printf("フィードから %d 件のURLを抽出しました。\n", len(urls))
+		//
+		//if len(urls) == 0 {
+		//	return fmt.Errorf("フィード (%s) から処理対象のURLが一つも抽出されませんでした", feedURL)
+		//}
+		//
+		//// 5. メインロジックの実行
+		//// runScrapePipeline は並列処理のコンテキストを内部で設定します。
+		//runScrapePipeline(urls, extractor, concurrency)
 
 		return nil
 	},
 }
 
 func init() {
-	// --urls フラグ: カンマ区切りのURLリスト
-	scraperCmd.Flags().StringVarP(&inputURLs, "urls", "u", "",
-		"抽出対象のカンマ区切りURLリスト (例: url1,url2,url3)")
+	// --url フラグ: 解析対象のフィードURL (RSS/Atom)
+	scraperCmd.Flags().StringVarP(&feedURL, "url", "u", "https://news.yahoo.co.jp/rss/categories/it.xml", "解析対象のフィードURL (RSS/Atom)")
 
 	// --concurrency フラグ: 並列実行数の指定
 	scraperCmd.Flags().IntVarP(&concurrency, "concurrency", "c",
