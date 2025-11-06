@@ -15,10 +15,7 @@ import (
 const (
 	appName           = "web-exact" // アプリケーション名を修正
 	defaultTimeoutSec = 10          // 秒
-	defaultMaxRetries = 5           // デフォルトのリトライ回数
-
-	// 全体処理のタイムアウト定数 (parseCmd, scraperCmd で利用)
-	DefaultOverallTimeout = 20 * time.Second
+	defaultMaxRetries = 2           // デフォルトのリトライ回数
 )
 
 // --- グローバル変数とフラグ構造体 ---

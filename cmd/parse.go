@@ -27,13 +27,12 @@ func runParsePipeline(feedURL string, fetcher feed.Fetcher) error {
 	if Flags.TimeoutSec == 0 {
 		clientTimeout = defaultTimeoutSec * time.Second
 	}
-	overallTimeout := clientTimeout * overallFeedTimeoutFactor
 
 	// 2. コンテキストの設定
-	ctx, cancel := context.WithTimeout(context.Background(), overallTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
 	defer cancel()
 
-	log.Printf("フィード解析開始 (URL: %s, 全体タイムアウト: %s)\n", feedURL, overallTimeout)
+	log.Printf("フィード解析開始 (URL: %s, 全体タイムアウト: %s)\n", feedURL, clientTimeout)
 
 	// 3. フィードパーサーの初期化
 	parser := feed.NewParser(fetcher)
