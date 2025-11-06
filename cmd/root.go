@@ -5,8 +5,6 @@ import (
 	"time"
 
 	clibase "github.com/shouni/go-cli-base"
-	"github.com/shouni/go-http-kit/pkg/httpkit"
-	"github.com/shouni/go-web-exact/v2/pkg/extract"
 	"github.com/spf13/cobra"
 )
 
@@ -26,8 +24,7 @@ type AppFlags struct {
 	MaxRetries int // --max-retries リトライ回数
 }
 
-var Flags AppFlags                // アプリケーション固有フラグにアクセスするためのグローバル変数
-var globalFetcher extract.Fetcher // または feed.Fetcher (両方満たすため)
+var Flags AppFlags // アプリケーション固有フラグにアクセスするためのグローバル変数
 
 // コマンドラインフラグ変数
 var (
@@ -70,18 +67,7 @@ func initAppPreRunE(cmd *cobra.Command, args []string) error {
 		log.Printf("HTTPクライアントのリトライ回数を設定しました (MaxRetries: %d)。", Flags.MaxRetries)
 	}
 
-	// 共有フェッチャーの初期化
-	globalFetcher = httpkit.New(
-		timeout,
-		httpkit.WithMaxRetries(uint64(Flags.MaxRetries)),
-	)
-
 	return nil
-}
-
-// GetGlobalFetcher は、初期化されたフェッチャーを返す関数 (DIの代わり)
-func GetGlobalFetcher() httpkit.Fetcher {
-	return globalFetcher
 }
 
 // --- エントリポイント ---
