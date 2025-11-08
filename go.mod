@@ -5,7 +5,7 @@ go 1.25
 require (
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/mmcdole/gofeed v1.3.0
-	github.com/shouni/go-utils v1.0.7
+	github.com/shouni/go-utils v1.0.8
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.46.0
 )
