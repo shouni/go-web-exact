@@ -4,13 +4,18 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/shouni/go-web-exact/v2/pkg/extract"
 	"github.com/shouni/go-web-exact/v2/pkg/types"
 )
 
-// DefaultMaxConcurrency は、並列スクレイピングのデフォルトの最大同時実行数を定義します。
-const DefaultMaxConcurrency = 6
+const (
+	// DefaultMaxConcurrency は、並列スクレイピングのデフォルトの最大同時実行数を定義します。
+	DefaultMaxConcurrency = 6
+	// DefaultScrapeRateLimit は、レートリミッターを定義します。
+	DefaultScrapeRateLimit = 1000 * time.Millisecond
+)
 
 // Scraper はWebコンテンツの抽出機能を提供するインターフェースです。
 type Scraper interface {
@@ -19,9 +24,9 @@ type Scraper interface {
 
 // ParallelScraper は Scraper インターフェースを実装する並列処理構造体です。
 type ParallelScraper struct {
-	extractor *extract.Extractor
-	// 最大並列数を保持するフィールド
-	maxConcurrency int
+	extractor      *extract.Extractor
+	maxConcurrency int           // 最大並列数を保持するフィールド
+	rateLimit      time.Duration // レートリミッターを保持するフィールド
 }
 
 // NewParallelScraper は ParallelScraper を初期化します。
@@ -44,6 +49,10 @@ func (s *ParallelScraper) ScrapeInParallel(ctx context.Context, urls []string) [
 	// バッファ付きチャネルをセマフォとして使用し、同時実行数を制限する
 	semaphore := make(chan struct{}, s.maxConcurrency)
 
+	ticker := time.NewTicker(s.rateLimit)
+	defer ticker.Stop()
+	rateLimiter := ticker.C
+
 	for _, url := range urls {
 		wg.Add(1)
 
@@ -57,13 +66,14 @@ func (s *ParallelScraper) ScrapeInParallel(ctx context.Context, urls []string) [
 			defer func() { <-semaphore }()
 
 			select {
+			case <-rateLimiter:
+				// レートリミット間隔が経過し、リクエストが許可された
 			case <-ctx.Done():
 				resultsChan <- types.URLResult{
 					URL:   u,
 					Error: ctx.Err(),
 				}
 				return
-			default:
 			}
 
 			content, hasBodyFound, err := s.extractor.FetchAndExtractText(ctx, u)
