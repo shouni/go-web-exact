@@ -31,13 +31,17 @@ type ParallelScraper struct {
 
 // NewParallelScraper は ParallelScraper を初期化します。
 // 依存性として Extractor と、最大同時実行数を受け取ります。
-func NewParallelScraper(extractor *extract.Extractor, maxConcurrency int) *ParallelScraper {
+func NewParallelScraper(extractor *extract.Extractor, maxConcurrency int, rateLimit time.Duration) *ParallelScraper {
 	if maxConcurrency <= 0 {
 		maxConcurrency = DefaultMaxConcurrency
+	}
+	if rateLimit <= 0 {
+		rateLimit = DefaultScrapeRateLimit
 	}
 	return &ParallelScraper{
 		extractor:      extractor,
 		maxConcurrency: maxConcurrency,
+		rateLimit:      rateLimit,
 	}
 }
 
