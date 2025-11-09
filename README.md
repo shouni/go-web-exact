@@ -9,8 +9,6 @@
 
 -----
 
-## 🚀 主な機能と特徴
-
 ### 🌟 コンテンツ抽出 (**Core Feature**)
 
 * **高精度なコンテンツ抽出:** 独自のセレクタとヒューリスティックを用いて、ナビゲーション、広告、コメントなどの**ノイズを排除**し、メインの記事本文を特定します。HTMLの**DOM出現順序を厳密に維持**してテキストを結合します。
@@ -20,7 +18,7 @@
 
 ### 🔄 データ取得と並列処理 (**New Features**)
 
-* **並列スクレイピング (`pkg/scraper`):** 複数のURLに対するコンテンツ抽出処理を、**セマフォ制御**により指定された最大同時実行数で安全に**並列実行**します。大量のコンテンツを効率的に処理できます。
+* **堅牢な並列スクレイピング (`pkg/scraper`):** 複数のURLに対するコンテンツ抽出処理を、**セマフォ制御**による同時実行数の制限と、**時間ベースのレートリミッター**によって安定して並列実行します。これにより、ターゲットサーバーへの過負荷を防ぎ、大量のコンテンツを効率的かつ安全に処理できます。
 * **フィード解析 (`pkg/feed`):** RSS/Atomフィードの取得と解析（`gofeed` に依存）を提供し、フィード内の記事情報を抽出します。
 * **柔軟な依存関係 (DI):** HTTPリクエストの実行には、外部で定義された **`extract.Fetcher` インターフェース**を依存性注入（DI）により受け取ります。これにより、リトライ、認証、キャッシュなどのロジックをアプリケーション側で自由に実装・選択できます。（例: `go-http-kit` の利用）
 
@@ -53,12 +51,10 @@ type Fetcher interface {
 package main
 
 import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/shouni/go-web-exact/v2/pkg/extract"
-	// 依存性注入のための Fetcher 実装 (例: go-http-kit) のインポートを想定
+    "context"
+    "fmt"
+    "log"
+    // ...
 )
 
 func main() {
@@ -71,22 +67,11 @@ func main() {
     
     // 2. Extractor を初期化 (FetcherをDI)
     extractor, err := extract.NewExtractor(fetcher)
-    if err != nil {
-       log.Fatalf("Extractorの初期化エラー: %v", err)
-    }
-
+    // ... (エラー処理は省略)
+    
     // 3. 抽出の実行
     text, hasBody, err := extractor.FetchAndExtractText(ctx, url)
-
-    // 4. 結果の出力
-    if err != nil {
-       log.Fatalf("抽出エラー: %v", err)
-    }
-    if hasBody {
-       fmt.Printf("抽出成功 (長さ: %d): %s\n", len(text), text[:200])
-    } else {
-       fmt.Println("本文は見つかりませんでした。")
-    }
+    // ... (結果の出力は省略)
 }
 ```
 
@@ -99,12 +84,12 @@ package main
 
 import (
     "context"
-    "fmt"
+	"fmt"
     "log"
+    "time"
 
     "github.com/shouni/go-web-exact/v2/pkg/extract"
     "github.com/shouni/go-web-exact/v2/pkg/scraper"
-    // types パッケージのインポートは不要 (ScraperInParallelの戻り値は公開型)
 )
 
 func main() {
@@ -116,22 +101,18 @@ func main() {
     
     urlsToScrape := []string{"url1", "url2", "url3", "url4", "url5"}
     
-    // 1. ParallelScraperを初期化 (最大同時実行数: 5)
+    // 1. ParallelScraperを初期化
     maxConcurrency := 5
-    parallelScraper := scraper.NewParallelScraper(extractor, maxConcurrency)
+    // 💡 修正点: レートリミット間隔 (1秒) を追加
+    scrapeRateLimit := 1000 * time.Millisecond 
+    parallelScraper := scraper.NewParallelScraper(extractor, maxConcurrency, scrapeRateLimit)
 
     // 2. 並列抽出を実行
     log.Println("並列スクレイピング開始...")
     results := parallelScraper.ScrapeInParallel(ctx, urlsToScrape)
     
     // 3. 結果の処理 (results は []types.URLResult です)
-    for _, res := range results {
-        if res.Error != nil {
-            fmt.Printf("❌ 失敗: %s, エラー: %v\n", res.URL, res.Error)
-        } else {
-            fmt.Printf("✅ 成功: %s, 長さ: %d\n", res.URL, len(res.Content))
-        }
-    }
+    // ... (結果の出力は省略)
 }
 ```
 
@@ -145,7 +126,7 @@ func main() {
 | :--- | :--- | :--- |
 | **`pkg/extract`** | **`extract`** | HTML解析、メインコンテンツ特定、ノイズ除去、テキスト整形ロジック。 |
 | **`pkg/feed`** | **`feed`** | RSS/Atomフィードの取得、パース、データ構造化ロジック。 |
-| **`pkg/scraper`** | **`scraper`** | `extract` パッケージを利用した複数URLの**並列処理**制御ロジック（セマフォ制御）。 |
+| **`pkg/scraper`** | **`scraper`** | `extract` パッケージを利用した複数URLの**並列処理**制御ロジック（セマフォ制御、**レートリミッター制御**）。 |
 | **`pkg/types`** | **`types`** | アプリケーション全体で共有されるデータ構造 (`URLResult`, `TemplateData` など) の定義。 |
 
 ### 外部依存パッケージ
@@ -155,6 +136,7 @@ func main() {
 * **`github.com/PuerkitoBio/goquery`**: jQueryライクな構文でのHTML要素検索。
 * **`github.com/mmcdole/gofeed`**: RSS/Atomフィードのパース。
 * **`golang.org/x/net/html`**: 標準ライブラリによるHTMLパース。
+* **`golang.org/x/time/rate`**: 堅牢なレートリミッター制御。
 
 -----
 
