@@ -8,12 +8,14 @@ import (
 
 	"github.com/shouni/go-web-exact/v2/pkg/extract"
 	"github.com/shouni/go-web-exact/v2/pkg/types"
+	"golang.org/x/time/rate"
 )
 
 const (
 	// DefaultMaxConcurrency は、並列スクレイピングのデフォルトの最大同時実行数を定義します。
 	DefaultMaxConcurrency = 6
-	// DefaultScrapeRateLimit は、レートリミッターを定義します。
+	// DefaultScrapeRateLimit は、ウェブスクレイピング時のデフォルトの最小リクエスト間隔 (Duration)
+	// 1秒間に1リクエストを許容する安全なレートとして設定。
 	DefaultScrapeRateLimit = 1000 * time.Millisecond
 )
 
@@ -25,12 +27,12 @@ type Scraper interface {
 // ParallelScraper は Scraper インターフェースを実装する並列処理構造体です。
 type ParallelScraper struct {
 	extractor      *extract.Extractor
-	maxConcurrency int           // 最大並列数を保持するフィールド
-	rateLimit      time.Duration // レートリミッターを保持するフィールド
+	maxConcurrency int           // 最大並列数 (セマフォで使用)
+	limiter        *rate.Limiter // レートリミッター (時間制御に使用)
 }
 
 // NewParallelScraper は ParallelScraper を初期化します。
-// 依存性として Extractor と、最大同時実行数を受け取ります。
+// 依存性として Extractor と、最大同時実行数、レートリミット間隔を受け取ります。
 func NewParallelScraper(extractor *extract.Extractor, maxConcurrency int, rateLimit time.Duration) *ParallelScraper {
 	if maxConcurrency <= 0 {
 		maxConcurrency = DefaultMaxConcurrency
@@ -38,10 +40,15 @@ func NewParallelScraper(extractor *extract.Extractor, maxConcurrency int, rateLi
 	if rateLimit <= 0 {
 		rateLimit = DefaultScrapeRateLimit
 	}
+
+	// rate.Every(rateLimit) は、その期間ごとに1トークンを生成するレートを設定します。
+	// バーストサイズ1は、厳密なレート制御（事前にトークンを貯めない）を意味します。
+	limiter := rate.NewLimiter(rate.Every(rateLimit), 1)
+
 	return &ParallelScraper{
 		extractor:      extractor,
 		maxConcurrency: maxConcurrency,
-		rateLimit:      rateLimit,
+		limiter:        limiter,
 	}
 }
 
@@ -52,10 +59,6 @@ func (s *ParallelScraper) ScrapeInParallel(ctx context.Context, urls []string) [
 
 	// バッファ付きチャネルをセマフォとして使用し、同時実行数を制限する
 	semaphore := make(chan struct{}, s.maxConcurrency)
-
-	ticker := time.NewTicker(s.rateLimit)
-	defer ticker.Stop()
-	rateLimiter := ticker.C
 
 	for _, url := range urls {
 		wg.Add(1)
@@ -69,13 +72,13 @@ func (s *ParallelScraper) ScrapeInParallel(ctx context.Context, urls []string) [
 			// 処理完了後にリソース（スロット）を解放。他の待機中のGoroutineが実行可能になる。
 			defer func() { <-semaphore }()
 
-			select {
-			case <-rateLimiter:
-				// レートリミット間隔が経過し、リクエストが許可された
-			case <-ctx.Done():
+			// rate.Limiter.Wait() を使用して、レート制限の待機とコンテキストキャンセルを同時に処理
+			// Wait(ctx) は、レートリミットに達した場合に待機し、ctx.Done() が発火した場合はエラーを返す。
+			if err := s.limiter.Wait(ctx); err != nil {
+				// レートリミット待機中にコンテキストがキャンセルされた場合のエラー処理
 				resultsChan <- types.URLResult{
 					URL:   u,
-					Error: ctx.Err(),
+					Error: fmt.Errorf("レートリミット待機中にキャンセル: %w", err),
 				}
 				return
 			}
