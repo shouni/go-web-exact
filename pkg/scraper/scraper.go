@@ -16,7 +16,7 @@ const (
 	DefaultMaxConcurrency = 10
 	// DefaultScrapeRateLimit は、ウェブスクレイピング時のデフォルトの最小リクエスト間隔 (Duration)
 	// 1秒間に1リクエストを許容する安全なレートとして設定。
-	DefaultScrapeRateLimit = 500 * time.Millisecond
+	DefaultScrapeRateLimit = 200 * time.Millisecond
 )
 
 // Scraper はWebコンテンツの抽出機能を提供するインターフェースです。
