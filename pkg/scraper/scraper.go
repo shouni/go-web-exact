@@ -3,11 +3,11 @@ package scraper
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/shouni/go-web-exact/v2/pkg/extract"
 	"github.com/shouni/go-web-exact/v2/pkg/types"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
@@ -24,9 +24,14 @@ type Scraper interface {
 	ScrapeInParallel(ctx context.Context, urls []string) []types.URLResult
 }
 
+// Extractor は指定された URL からコンテンツを取得し、そこからテキストを抽出するためのインターフェースです。
+type Extractor interface {
+	FetchAndExtractText(ctx context.Context, url string) (string, bool, error)
+}
+
 // ParallelScraper は Scraper インターフェースを実装する並列処理構造体です。
 type ParallelScraper struct {
-	extractor      *extract.Extractor
+	extractor      Extractor
 	maxConcurrency int           // 最大並列数 (セマフォで使用)
 	limiter        *rate.Limiter // レートリミッター (時間制御に使用)
 }
@@ -54,54 +59,33 @@ func NewParallelScraper(extractor *extract.Extractor, maxConcurrency int, rateLi
 
 // ScrapeInParallel は Scraper インターフェースのメソッドを実装します。
 func (s *ParallelScraper) ScrapeInParallel(ctx context.Context, urls []string) []types.URLResult {
-	var wg sync.WaitGroup
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(s.maxConcurrency)
+
 	resultsChan := make(chan types.URLResult, len(urls))
 
-	// バッファ付きチャネルをセマフォとして使用し、同時実行数を制限する
-	semaphore := make(chan struct{}, s.maxConcurrency)
-
 	for _, url := range urls {
-		wg.Add(1)
-
-		// リソース（スロット）の確保。maxConcurrency件実行中の場合はここでブロックして待機。
-		semaphore <- struct{}{}
-
-		go func(u string) {
-			defer wg.Done()
-
-			// 処理完了後にリソース（スロット）を解放。他の待機中のGoroutineが実行可能になる。
-			defer func() { <-semaphore }()
-
-			// rate.Limiter.Wait() を使用して、レート制限の待機とコンテキストキャンセルを同時に処理
-			// Wait(ctx) は、レートリミットに達した場合に待機し、ctx.Done() が発火した場合はエラーを返す。
-			if err := s.limiter.Wait(ctx); err != nil {
-				// レートリミット待機中にコンテキストがキャンセルされた場合のエラー処理
-				resultsChan <- types.URLResult{
-					URL:   u,
-					Error: fmt.Errorf("レートリミット待機中にキャンセル: %w", err),
-				}
-				return
+		g.Go(func() error {
+			if err := s.limiter.Wait(gCtx); err != nil {
+				resultsChan <- types.URLResult{URL: url, Error: err}
+				return nil // グループ全体を停止させない場合
 			}
 
-			content, hasBodyFound, err := s.extractor.FetchAndExtractText(ctx, u)
+			content, hasBodyFound, err := s.extractor.FetchAndExtractText(gCtx, url)
 
 			var extractErr error
 			if err != nil {
 				extractErr = fmt.Errorf("コンテンツの抽出に失敗しました: %w", err)
 			} else if !hasBodyFound {
-				// 本文が見つからなかった場合を抽出失敗と判断
-				extractErr = fmt.Errorf("URL %s から有効な本文を抽出できませんでした", u)
+				extractErr = fmt.Errorf("URL %s から有効な本文を抽出できませんでした", url)
 			}
 
-			resultsChan <- types.URLResult{
-				URL:     u,
-				Content: content,
-				Error:   extractErr,
-			}
-		}(url)
+			resultsChan <- types.URLResult{URL: url, Content: content, Error: extractErr}
+			return nil
+		})
 	}
 
-	wg.Wait()
+	_ = g.Wait()
 	close(resultsChan)
 
 	var finalResults []types.URLResult
