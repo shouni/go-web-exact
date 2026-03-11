@@ -24,9 +24,14 @@ type Scraper interface {
 	ScrapeInParallel(ctx context.Context, urls []string) []types.URLResult
 }
 
+// Extractor は指定された URL からコンテンツを取得し、そこからテキストを抽出するためのインターフェースです。
+type Extractor interface {
+	FetchAndExtractText(ctx context.Context, url string) (string, bool, error)
+}
+
 // ParallelScraper は Scraper インターフェースを実装する並列処理構造体です。
 type ParallelScraper struct {
-	extractor      *extract.Extractor
+	extractor      Extractor
 	maxConcurrency int           // 最大並列数 (セマフォで使用)
 	limiter        *rate.Limiter // レートリミッター (時間制御に使用)
 }
@@ -70,9 +75,9 @@ func (s *ParallelScraper) ScrapeInParallel(ctx context.Context, urls []string) [
 
 			var extractErr error
 			if err != nil {
-				extractErr = fmt.Errorf("抽出失敗: %w", err)
+				extractErr = fmt.Errorf("コンテンツの抽出に失敗しました: %w", err)
 			} else if !hasBodyFound {
-				extractErr = fmt.Errorf("本文抽出不可: %s", url)
+				extractErr = fmt.Errorf("URL %s から有効な本文を抽出できませんでした", url)
 			}
 
 			resultsChan <- types.URLResult{URL: url, Content: content, Error: extractErr}
