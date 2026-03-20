@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/shouni/go-web-exact/v2/pkg/extract"
+	"github.com/shouni/go-web-exact/v2/extract"
 	"github.com/stretchr/testify/assert"
 )
 

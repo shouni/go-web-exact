@@ -5,129 +5,34 @@
 [![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/shouni/go-web-exact)](https://github.com/shouni/go-web-exact/tags)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-このプロジェクトは、Webコンテンツの**高精度なメインコンテンツ抽出**、**フィード解析**、および**並列スクレイピング**に特化した多機能ライブラリです。
+## 💡 概要 (About) — 高精度抽出と並列処理に特化した Web コンテンツ解析ライブラリ
 
------
+**Go Web Exact** は、Web サイトから「真に価値のある情報」を抽出し、効率的に収集するためのパワフルなツールキットです。独自のヒューリスティック解析による**高精度なメインコンテンツ抽出**と、ターゲットへの負荷を考慮した**安全な並列スクレイピング**を統合しています。
 
-### 🌟 コンテンツ抽出 (**Core Feature**)
+### 🌟 コンテンツ抽出 (Core Feature)
+* **高精度なメインコンテンツ特定**: 独自のセレクタとヒューリスティックを用いて、広告・ナビゲーション・コメントなどのノイズを徹底排除。DOMの出現順序を厳密に維持し、文脈を壊さずに本文を抽出します。
+* **構造的な重複防止**: テキスト要素とその子孫（テーブル等）の重複を、カスタム走査ロジックによって安全に制御。二重抽出を防ぎ、クリーンなデータを保証します。
+* **高度なテキスト整形**: `noiseSelectors` による不要要素の自動削除に加え、連続するスペースや改行を最適化し、AI解析や音声合成に即座に利用可能なテキストを生成します。
 
-* **高精度なコンテンツ抽出:** 独自のセレクタとヒューリスティックを用いて、ナビゲーション、広告、コメントなどの**ノイズを排除**し、メインの記事本文を特定します。HTMLの**DOM出現順序を厳密に維持**してテキストを結合します。
-* **コンテンツ重複の自動防止:** 一般的なテキスト要素の子孫に含まれるテーブルなどを、**安全なカスタム走査ロジック**によって自動的に除外し、重複抽出を防ぎます。
-* **ノイズの排除:** 抽出ロジック内で定義された **`noiseSelectors`** を使用して、指定された不要な要素を削除します。
-* **テキストの整形:** 抽出されたテキストから不要な改行や連続するスペースを除去し、クリーンな整形済みテキストを返します。
+### 🔄 データ取得と並列処理 (Advanced Features)
+* **堅牢な並列スクレイピング**: `pkg/scraper` は、**セマフォによる同時実行数制御**と**時間ベースのレートリミッター**を内蔵。サーバーへの過負荷を防ぎつつ、大量のURLを最短時間で安全に処理します。
+* **フィード・インテリジェンス**: RSS/Atomフィードの解析（`gofeed` ベース）を統合。最新の記事リストからシームレスに本文抽出パイプラインへ繋げることが可能です。
+* **柔軟な依存関係 (DI)**: `ports.Fetcher` インターフェースを介した依存性注入を採用。`go-http-kit` 等の外部ライブラリと組み合わせることで、リトライやSSRF対策、認証ロジックを自由にカスタマイズ可能です。
 
-### 🔄 データ取得と並列処理 (**New Features**)
+---
 
-* **堅牢な並列スクレイピング (`pkg/scraper`):** 複数のURLに対するコンテンツ抽出処理を、**セマフォ制御**による同時実行数の制限と、**時間ベースのレートリミッター**によって安定して並列実行します。これにより、ターゲットサーバーへの過負荷を防ぎ、大量のコンテンツを効率的かつ安全に処理できます。
-* **フィード解析 (`pkg/feed`):** RSS/Atomフィードの取得と解析（`gofeed` に依存）を提供し、フィード内の記事情報を抽出します。
-* **柔軟な依存関係 (DI):** HTTPリクエストの実行には、外部で定義された **`extract.Fetcher` インターフェース**を依存性注入（DI）により受け取ります。これにより、リトライ、認証、キャッシュなどのロジックをアプリケーション側で自由に実装・選択できます。（例: `go-http-kit` の利用）
+## 📂 プロジェクト構造 (Layout)
 
------
-
-## 📦 ライブラリ利用方法
-
-### 1\. 単一URLのコンテンツ抽出 (`pkg/extract`)
-
-主要な抽出機能は **`pkg/extract`** パッケージとして提供されます。外部のHTTPクライアントは `extract.Fetcher` インターフェースを満たす必要があります。
-
-#### 1-1. インターフェース定義 (Fetcher)
-
-`go-web-exact` は、以下の **`Fetcher`** インターフェースに依存します。
-
-```go
-package extract
-
-import "context"
-
-// Fetcher は、指定されたURLからリトライ付きでコンテンツを取得するクライアントインターフェースです。
-type Fetcher interface {
-    FetchBytes(ctx context.Context, url string) ([]byte, error)
-}
+```text
+go-web-exact/
+├── extract/            # コンテンツ抽出エンジン
+├── feed/               # フィード解析
+├── scraper/            # スクレイピング基盤
+├── ports/              # 外部境界定義
+└── types/              # 共通データモデル
 ```
 
-#### 1-2. コンテンツの抽出 (`extract.Extractor` の利用)
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "log"
-    // ...
-)
-
-func main() {
-    ctx := context.Background()
-    url := "https://example.com/article"
-    
-    // 1. Fetcher の初期化 (外部ライブラリ/カスタムクライアントを想定)
-    // ⚠️ 例: fetcher := httpkit.New(10 * time.Second)
-    var fetcher extract.Fetcher // 抽象的な Fetcher 実装を想定
-    
-    // 2. Extractor を初期化 (FetcherをDI)
-    extractor, err := extract.NewExtractor(fetcher)
-    // ... (エラー処理は省略)
-    
-    // 3. 抽出の実行
-    text, hasBody, err := extractor.FetchAndExtractText(ctx, url)
-    // ... (結果の出力は省略)
-}
-```
-
-### 2\. 複数のURLの並列抽出 (`pkg/scraper`)
-
-`pkg/scraper` パッケージは、`extract.Extractor` を利用して複数のURLを効率的に処理します。
-
-```go
-package main
-
-import (
-    "context"
-	"fmt"
-    "log"
-    "time"
-
-    "github.com/shouni/go-web-exact/v2/pkg/extract"
-    "github.com/shouni/go-web-exact/v2/pkg/scraper"
-)
-
-func main() {
-    ctx := context.Background()
-    // ⚠️ Fetcher の初期化 (前述の例と同様)
-    var fetcher extract.Fetcher 
-    
-    extractor, _ := extract.NewExtractor(fetcher)
-    
-    urlsToScrape := []string{"url1", "url2", "url3", "url4", "url5"}
-    
-    // 1. ParallelScraperを初期化
-    maxConcurrency := 5
-    // 💡 修正点: レートリミット間隔 (1秒) を追加
-    scrapeRateLimit := 1000 * time.Millisecond 
-    parallelScraper := scraper.NewParallelScraper(extractor, maxConcurrency, scrapeRateLimit)
-
-    // 2. 並列抽出を実行
-    log.Println("並列スクレイピング開始...")
-    results := parallelScraper.ScrapeInParallel(ctx, urlsToScrape)
-    
-    // 3. 結果の処理 (results は []types.URLResult です)
-    // ... (結果の出力は省略)
-}
-```
-
------
-
-## 🛠️ 開発者向け情報
-
-### パッケージ構成
-
-| ディレクトリ | パッケージ名 | 役割 |
-| :--- | :--- | :--- |
-| **`pkg/extract`** | **`extract`** | HTML解析、メインコンテンツ特定、ノイズ除去、テキスト整形ロジック。 |
-| **`pkg/feed`** | **`feed`** | RSS/Atomフィードの取得、パース、データ構造化ロジック。 |
-| **`pkg/scraper`** | **`scraper`** | `extract` パッケージを利用した複数URLの**並列処理**制御ロジック（セマフォ制御、**レートリミッター制御**）。 |
-| **`pkg/types`** | **`types`** | アプリケーション全体で共有されるデータ構造 (`URLResult`, `TemplateData` など) の定義。 |
+---
 
 ### 外部依存パッケージ
 
