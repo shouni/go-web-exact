@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/shouni/go-web-exact/v2/pkg/extract"
-	"github.com/shouni/go-web-exact/v2/pkg/types"
+	"github.com/shouni/go-web-exact/v2/extract"
+	"github.com/shouni/go-web-exact/v2/types"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
