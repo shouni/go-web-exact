@@ -8,13 +8,17 @@ type Option func(*ParallelScraper)
 // WithMaxConcurrency は最大並列を設定します。
 func WithMaxConcurrency(max int) Option {
 	return func(c *ParallelScraper) {
-		c.maxConcurrency = max
+		if max > 0 {
+			c.maxConcurrency = max
+		}
 	}
 }
 
 // WithRateLimit はリトライの初期間隔を設定します。
 func WithRateLimit(d time.Duration) Option {
 	return func(c *ParallelScraper) {
-		c.rateLimit = d
+		if d > 0 {
+			c.rateLimit = d
+		}
 	}
 }

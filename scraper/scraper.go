@@ -29,20 +29,21 @@ type ParallelScraper struct {
 	extractor      Extractor
 	maxConcurrency int
 	rateLimit      time.Duration
+	limiter        *rate.Limiter
 }
 
 // NewParallelScraper は ParallelScraper を初期化します。
-func NewParallelScraper(extractor Extractor, options ...Option) *ParallelScraper {
-	scraper := &ParallelScraper{
-		extractor:      extractor,
+func NewParallelScraper(opts ...Option) *ParallelScraper {
+	s := &ParallelScraper{
 		maxConcurrency: DefaultMaxConcurrency,
 		rateLimit:      DefaultScrapeRateLimit,
 	}
-	for _, opt := range options {
-		opt(scraper)
+
+	for _, opt := range opts {
+		opt(s)
 	}
 
-	return scraper
+	return s
 }
 
 // ScrapeInParallel は Scraper インターフェースのメソッドを実装します。
