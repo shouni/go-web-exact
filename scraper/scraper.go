@@ -33,8 +33,9 @@ type ParallelScraper struct {
 }
 
 // NewParallelScraper は ParallelScraper を初期化します。
-func NewParallelScraper(opts ...Option) *ParallelScraper {
+func NewParallelScraper(extractor Extractor, opts ...Option) *ParallelScraper {
 	s := &ParallelScraper{
+		extractor:      extractor,
 		maxConcurrency: DefaultMaxConcurrency,
 		rateLimit:      DefaultScrapeRateLimit,
 	}
@@ -43,6 +44,8 @@ func NewParallelScraper(opts ...Option) *ParallelScraper {
 		opt(s)
 	}
 
+	s.limiter = rate.NewLimiter(rate.Every(s.rateLimit), 1)
+
 	return s
 }
 
@@ -50,12 +53,11 @@ func NewParallelScraper(opts ...Option) *ParallelScraper {
 func (s *ParallelScraper) ScrapeInParallel(ctx context.Context, urls []string) []ports.URLResult {
 	g, gCtx := errgroup.WithContext(ctx)
 	g.SetLimit(s.maxConcurrency)
-	limiter := rate.NewLimiter(rate.Every(s.rateLimit), 1)
 	resultsChan := make(chan ports.URLResult, len(urls))
 
 	for _, url := range urls {
 		g.Go(func() error {
-			if err := limiter.Wait(gCtx); err != nil {
+			if err := s.limiter.Wait(gCtx); err != nil {
 				resultsChan <- ports.URLResult{URL: url, Error: err}
 				return nil // グループ全体を停止させない場合
 			}
