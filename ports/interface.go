@@ -2,8 +2,6 @@ package ports
 
 import (
 	"context"
-
-	"github.com/shouni/go-web-exact/v2/types"
 )
 
 // Fetcher は、HTMLドキュメントの生バイト配列を取得する機能のインターフェースを定義します。
@@ -18,5 +16,5 @@ type Extractor interface {
 
 // Scraper はWebコンテンツの抽出機能を提供するインターフェースです。
 type Scraper interface {
-	ScrapeInParallel(ctx context.Context, urls []string) []types.URLResult
+	ScrapeInParallel(ctx context.Context, urls []string) []URLResult
 }
