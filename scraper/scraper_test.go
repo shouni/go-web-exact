@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// mockExtractor はテスト用の Extractor 実装です
+// mockExtractor はテスト用の Extractor 実装なのだ。
 type mockExtractor struct {
 	fetchFunc func(ctx context.Context, url string) (string, bool, error)
 	callCount int32
@@ -19,7 +19,7 @@ func (m *mockExtractor) FetchAndExtractText(ctx context.Context, url string) (st
 	return m.fetchFunc(ctx, url)
 }
 
-func TestParallelScraper_ScrapeInParallel(t *testing.T) {
+func TestConcurrent_Run(t *testing.T) {
 	t.Run("正常系: すべてのURLからコンテンツが抽出できること", func(t *testing.T) {
 		mock := &mockExtractor{
 			fetchFunc: func(ctx context.Context, url string) (string, bool, error) {
@@ -27,10 +27,12 @@ func TestParallelScraper_ScrapeInParallel(t *testing.T) {
 			},
 		}
 
-		s := NewParallelScraper(mock, WithMaxConcurrency(2))
+		// NewParallelScraper -> New に変更
+		s := New(mock, WithMaxConcurrency(2))
 		urls := []string{"http://example.com/1", "http://example.com/2"}
 
-		results := s.ScrapeInParallel(context.Background(), urls)
+		// ScrapeInParallel -> Run に変更
+		results := s.Run(context.Background(), urls)
 
 		if len(results) != 2 {
 			t.Errorf("期待する結果件数は 2 ですが、%d 件でした", len(results))
@@ -53,10 +55,10 @@ func TestParallelScraper_ScrapeInParallel(t *testing.T) {
 			},
 		}
 
-		s := NewParallelScraper(mock)
+		s := New(mock)
 		urls := []string{"http://err.com"}
 
-		results := s.ScrapeInParallel(context.Background(), urls)
+		results := s.Run(context.Background(), urls)
 
 		if len(results) != 1 || results[0].Error == nil {
 			t.Fatal("エラーが正しく結果に格納されていません")
@@ -70,10 +72,10 @@ func TestParallelScraper_ScrapeInParallel(t *testing.T) {
 			},
 		}
 
-		s := NewParallelScraper(mock)
+		s := New(mock)
 		urls := []string{"http://nobody.com"}
 
-		results := s.ScrapeInParallel(context.Background(), urls)
+		results := s.Run(context.Background(), urls)
 
 		if results[0].Error == nil {
 			t.Error("本文未検出時のエラーが生成されていません")
@@ -89,14 +91,15 @@ func TestParallelScraper_ScrapeInParallel(t *testing.T) {
 
 		// 100ms 間隔で設定
 		interval := 100 * time.Millisecond
-		s := NewParallelScraper(mock, WithRateLimit(interval))
+		s := New(mock, WithRateLimit(interval))
 		urls := []string{"u1", "u2", "u3"}
 
 		start := time.Now()
-		_ = s.ScrapeInParallel(context.Background(), urls)
+		_ = s.Run(context.Background(), urls)
 		duration := time.Since(start)
 
-		// 3リクエスト目は最低でも interval * 2 (200ms) 以上の時間が経過しているはず
+		// 1つ目は即時、2つ目は100ms後、3つ目は200ms後
+		// 合計で最低 200ms 以上の経過が必要なのだ。
 		expectedMin := 200 * time.Millisecond
 		if duration < expectedMin {
 			t.Errorf("レートリミットが機能していない可能性があります。所要時間: %v, 期待値: > %v", duration, expectedMin)
