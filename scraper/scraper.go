@@ -18,7 +18,7 @@ const (
 	DefaultRateLimit = 200 * time.Millisecond
 )
 
-// Concurrent は、並列かつレート制限を考慮してスクレイピングを実行するエンジンなのだ。
+// Concurrent は、並列かつレート制限を考慮してスクレイピングを実行するエンジンです。
 type Concurrent struct {
 	extractor      ports.Extractor
 	maxConcurrency int
@@ -26,7 +26,7 @@ type Concurrent struct {
 	limiter        *rate.Limiter
 }
 
-// New は Concurrent 構造体を初期化するのだ。
+// New は Concurrent 構造体を初期化します。
 func New(extractor ports.Extractor, opts ...Option) *Concurrent {
 	c := &Concurrent{
 		extractor:      extractor,
@@ -42,8 +42,7 @@ func New(extractor ports.Extractor, opts ...Option) *Concurrent {
 	return c
 }
 
-// Run は複数の URL に対して並列スクレイピングを実行するのだ。
-// 呼び出し側が scraper.New(...).Run(...) となり、非常に読みやすくなるのだ。
+// Run は複数の URL に対して並列スクレイピングを実行します。
 func (c *Concurrent) Run(ctx context.Context, urls []string) []ports.URLResult {
 	g, gCtx := errgroup.WithContext(ctx)
 	g.SetLimit(c.maxConcurrency)
