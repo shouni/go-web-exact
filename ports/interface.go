@@ -16,5 +16,10 @@ type Extractor interface {
 
 // Scraper はWebコンテンツの抽出機能を提供するインターフェースです。
 type Scraper interface {
-	ScrapeInParallel(ctx context.Context, urls []string) []URLResult
+	Run(ctx context.Context, urls []string) []URLResult
+}
+
+// ScrapeRunner は、スクレイピングの実行パイプライン（並列処理、リトライ制御など）を管理するインターフェースです。
+type ScrapeRunner interface {
+	Run(ctx context.Context, urls []string) []URLResult
 }
