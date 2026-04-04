@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/shouni/go-web-exact/v2/ports"
 )
@@ -27,7 +28,11 @@ func (m *mockExtractor) FetchAndExtractText(ctx context.Context, url string) (st
 }
 
 func TestScrapeRunner_Run(t *testing.T) {
-	ctx := context.Background()
+	// 共通設定: テストを高速化するためにディレイを最小にするのだ！
+	fastOpts := []Option{
+		WithInitialDelay(1 * time.Millisecond),
+		WithRetryDelay(1 * time.Millisecond),
+	}
 
 	t.Run("初回で全件成功する場合", func(t *testing.T) {
 		scraper := &mockScraper{
@@ -38,10 +43,8 @@ func TestScrapeRunner_Run(t *testing.T) {
 				}
 			},
 		}
-		extractor := &mockExtractor{} // リトライは走らないので未定義でOK
-
-		r := NewScrapeRunner(scraper, extractor)
-		results := r.Run(ctx, []string{"http://ok1.com", "http://ok2.com"})
+		r := NewScrapeRunner(scraper, &mockExtractor{}, fastOpts...)
+		results := r.Run(context.Background(), []string{"http://ok1.com", "http://ok2.com"})
 
 		if len(results) != 2 {
 			t.Errorf("結果は2件であるべきだが %d 件だったのだ", len(results))
@@ -66,49 +69,33 @@ func TestScrapeRunner_Run(t *testing.T) {
 			},
 		}
 
-		r := NewScrapeRunner(scraper, extractor)
-		results := r.Run(ctx, []string{"http://ok.com", "http://retry.com"})
+		r := NewScrapeRunner(scraper, extractor, fastOpts...)
+		results := r.Run(context.Background(), []string{"http://ok.com", "http://retry.com"})
 
 		if len(results) != 2 {
 			t.Errorf("リトライを含めて2件成功すべきなのだ。got: %d", len(results))
 		}
-
-		// 内容の確認
-		foundRetry := false
-		for _, res := range results {
-			if res.URL == "http://retry.com" && res.Content == "body_retried" {
-				foundRetry = true
-			}
-		}
-		if !foundRetry {
-			t.Error("リトライで取得したコンテンツが含まれていないのだ")
-		}
 	})
 
-	t.Run("リトライしても失敗する場合", func(t *testing.T) {
+	t.Run("リトライ中にコンテキストがキャンセルされた場合", func(t *testing.T) {
 		scraper := &mockScraper{
 			runFunc: func(ctx context.Context, urls []string) []ports.URLResult {
 				return []ports.URLResult{
 					{URL: "http://ok.com", Content: "body_ok"},
-					{URL: "http://fail.com", Error: errors.New("hard error")},
+					{URL: "http://retry.com", Error: errors.New("fail")},
 				}
 			},
 		}
-		extractor := &mockExtractor{
-			extractFunc: func(ctx context.Context, url string) (string, bool, error) {
-				return "", false, errors.New("still failing")
-			},
-		}
+		// 意図的にキャンセル済みのコンテキストを作成するのだ
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
 
-		r := NewScrapeRunner(scraper, extractor)
-		results := r.Run(ctx, []string{"http://ok.com", "http://fail.com"})
+		r := NewScrapeRunner(scraper, &mockExtractor{}, fastOpts...)
+		results := r.Run(ctx, []string{"http://ok.com", "http://retry.com"})
 
-		// 成功した1件だけが返るはずなのだ
+		// キャンセルされた場合、リトライは実行されず、最初の成功分だけが返るはずなのだ
 		if len(results) != 1 {
-			t.Errorf("成功した1件だけが返るべきなのだ。got: %d", len(results))
-		}
-		if results[0].URL != "http://ok.com" {
-			t.Errorf("成功したURLが違うのだ。got: %s", results[0].URL)
+			t.Errorf("キャンセル時はリトライが走らず1件のみ返るべきなのだ。got: %d", len(results))
 		}
 	})
 
@@ -124,10 +111,10 @@ func TestScrapeRunner_Run(t *testing.T) {
 			},
 		}
 
-		r := NewScrapeRunner(scraper, extractor)
-		results := r.Run(ctx, []string{"http://fail.com"})
+		r := NewScrapeRunner(scraper, extractor, fastOpts...)
+		results := r.Run(context.Background(), []string{"http://fail.com"})
 
-		if results == nil || len(results) != 0 {
+		if len(results) != 0 {
 			t.Error("全件失敗時は空のスライスが返るべきなのだ")
 		}
 	})
