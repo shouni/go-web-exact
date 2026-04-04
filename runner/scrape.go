@@ -11,15 +11,15 @@ import (
 )
 
 const (
-	// DefaultInitialDelay は並列実行後のデフォルト待機時間なのだ。
+	// DefaultInitialDelay は並列実行後のデフォルト待機時間です。
 	DefaultInitialDelay = 5 * time.Second
-	// DefaultRetryDelay はリトライ開始前のデフォルト待機時間なのだ。
+	// DefaultRetryDelay はリトライ開始前のデフォルト待機時間です。
 	DefaultRetryDelay = 3 * time.Second
-	// PhaseContent はこの実行フェーズの識別子なのだ。
+	// PhaseContent はこの実行フェーズの識別子です。
 	PhaseContent = "ContentExtraction"
 )
 
-// ScrapeRunner は、並列スクレイピングと失敗時の逐次リトライを制御する指揮官なのだ。
+// ScrapeRunner は、並列スクレイピングと失敗時の逐次リトライを制御する指揮官です。
 type ScrapeRunner struct {
 	scraper            ports.Scraper
 	extractor          ports.Extractor
@@ -27,20 +27,20 @@ type ScrapeRunner struct {
 	retryScrapeDelay   time.Duration
 }
 
-// Option は ScrapeRunner の挙動をカスタマイズするための関数型なのだ。
+// Option は ScrapeRunner の挙動をカスタマイズするための関数型です。
 type Option func(*ScrapeRunner)
 
-// WithInitialDelay は初回実行後の待機時間を設定するのだ。
+// WithInitialDelay は初回実行後の待機時間を設定します。
 func WithInitialDelay(d time.Duration) Option {
 	return func(r *ScrapeRunner) { r.initialScrapeDelay = d }
 }
 
-// WithRetryDelay はリトライ前の待機時間を設定するのだ。
+// WithRetryDelay はリトライ前の待機時間を設定します。
 func WithRetryDelay(d time.Duration) Option {
 	return func(r *ScrapeRunner) { r.retryScrapeDelay = d }
 }
 
-// NewScrapeRunner は依存関係とオプションを適用して Runner を生成するのだ。
+// NewScrapeRunner は依存関係とオプションを適用して Runner を生成します。
 func NewScrapeRunner(scraper ports.Scraper, extractor ports.Extractor, opts ...Option) *ScrapeRunner {
 	r := &ScrapeRunner{
 		scraper:            scraper,
@@ -54,7 +54,7 @@ func NewScrapeRunner(scraper ports.Scraper, extractor ports.Extractor, opts ...O
 	return r
 }
 
-// Run は、URLリストに対して一括抽出と自動リトライのパイプラインを実行するのだ。
+// Run は、URLリストに対して一括抽出と自動リトライのパイプラインを実行します。
 func (r *ScrapeRunner) Run(ctx context.Context, urls []string) []ports.URLResult {
 	slog.Info("Phase: "+PhaseContent+" - Start", slog.Int("count", len(urls)))
 
@@ -94,7 +94,7 @@ func (r *ScrapeRunner) Run(ctx context.Context, urls []string) []ports.URLResult
 	return successes
 }
 
-// retry は、失敗したURLに対して逐次抽出を試みるのだ。
+// retry は、失敗したURLに対して逐次抽出を試みます。
 func (r *ScrapeRunner) retry(ctx context.Context, urls []string) []ports.URLResult {
 	slog.Warn("抽出失敗URLのリトライ準備中...",
 		slog.Int("count", len(urls)),
@@ -142,7 +142,7 @@ func (r *ScrapeRunner) retry(ctx context.Context, urls []string) []ports.URLResu
 	return results
 }
 
-// wait は time.After と Context.Done を監視して、安全に待機するヘルパーなのだ。
+// wait は time.After と Context.Done を監視して、安全に待機するヘルパーです。
 func (r *ScrapeRunner) wait(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
@@ -155,7 +155,7 @@ func (r *ScrapeRunner) wait(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// splitResults は結果を成功と失敗したURLリストに分離するのだ。
+// splitResults は結果を成功と失敗したURLリストに分離します。
 func splitResults(results []ports.URLResult) (successes []ports.URLResult, failed []string) {
 	for _, res := range results {
 		if res.Error != nil || res.Content == "" {
@@ -167,8 +167,8 @@ func splitResults(results []ports.URLResult) (successes []ports.URLResult, faile
 	return successes, failed
 }
 
-// simplifyError は、ログ出力用に冗長なエラーメッセージを整理するのだ。
-// TODO: 下位パッケージでカスタムエラー型を定義し、errors.As による判定へ移行することを推奨するのだ。
+// simplifyError は、ログ出力用に冗長なエラーメッセージを整理します。
+// TODO: 下位パッケージでカスタムエラー型を定義し、errors.As による判定へ移行することを推奨。
 func simplifyError(err error) string {
 	msg := err.Error()
 	// 暫定的な文字列パース（将来の型判定導入までの繋ぎなのだ）
