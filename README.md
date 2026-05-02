@@ -4,6 +4,9 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/shouni/go-web-exact)](https://golang.org/)
 [![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/shouni/go-web-exact)](https://github.com/shouni/go-web-exact/tags)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Report Card](https://goreportcard.com/badge/github.com/shouni/go-web-exact)](https://goreportcard.com/report/github.com/shouni/go-web-exact)
+[![Go Reference](https://pkg.go.dev/badge/github.com/shouni/go-web-exact.svg)](https://pkg.go.dev/github.com/shouni/go-web-exact)
+[![Status](https://img.shields.io/badge/Status-Completed-brightgreen)](#)
 
 ## 💡 概要 (About) — 高精度抽出と堅牢な実行パイプラインに特化した Web 解析ライブラリ
 
