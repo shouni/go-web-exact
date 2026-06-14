@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/shouni/go-web-exact/v2/extract"
@@ -180,4 +181,20 @@ func TestFetchAndExtractText(t *testing.T) {
 			assert.Equal(t, tc.expectedText, actualText, "抽出されたテキストが期待値と異なります")
 		})
 	}
+}
+
+func TestExtractText(t *testing.T) {
+	const titlePrefix = "【記事タイトル】 "
+	body := "This paragraph is long enough to be treated as extracted article body."
+	extractor, err := extract.NewExtractor(&MockFetcher{})
+	assert.NoError(t, err)
+
+	actualText, actualBodyFound, err := extractor.ExtractText(
+		context.Background(),
+		strings.NewReader(fmt.Sprintf(`<html><head><title>Reader Title</title></head><body><main><p>%s</p></main></body></html>`, body)),
+	)
+
+	assert.NoError(t, err)
+	assert.True(t, actualBodyFound)
+	assert.Equal(t, titlePrefix+"Reader Title"+"\n\n"+body, actualText)
 }

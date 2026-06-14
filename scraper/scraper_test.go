@@ -3,6 +3,7 @@ package scraper
 import (
 	"context"
 	"errors"
+	"io"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,6 +18,10 @@ type mockExtractor struct {
 func (m *mockExtractor) FetchAndExtractText(ctx context.Context, url string) (string, bool, error) {
 	atomic.AddInt32(&m.callCount, 1)
 	return m.fetchFunc(ctx, url)
+}
+
+func (m *mockExtractor) ExtractText(ctx context.Context, reader io.Reader) (string, bool, error) {
+	return "", false, errors.New("unexpected ExtractText call")
 }
 
 func TestConcurrent_Run(t *testing.T) {

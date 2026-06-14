@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"io"
 )
 
 // Fetcher は、HTMLドキュメントの生バイト配列を取得する機能のインターフェースを定義します。
@@ -9,8 +10,9 @@ type Fetcher interface {
 	FetchBytes(ctx context.Context, url string) ([]byte, error)
 }
 
-// Extractor は指定された URL からコンテンツを取得し、そこからテキストを抽出するためのインターフェースです。
+// Extractor はHTMLコンテンツからテキストを抽出するためのインターフェースです。
 type Extractor interface {
+	ExtractText(ctx context.Context, reader io.Reader) (string, bool, error)
 	FetchAndExtractText(ctx context.Context, url string) (string, bool, error)
 }
 

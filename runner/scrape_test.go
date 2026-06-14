@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -25,6 +26,10 @@ type mockExtractor struct {
 
 func (m *mockExtractor) FetchAndExtractText(ctx context.Context, url string) (string, bool, error) {
 	return m.extractFunc(ctx, url)
+}
+
+func (m *mockExtractor) ExtractText(ctx context.Context, reader io.Reader) (string, bool, error) {
+	return "", false, errors.New("unexpected ExtractText call")
 }
 
 func TestScrapeRunner_Run(t *testing.T) {
