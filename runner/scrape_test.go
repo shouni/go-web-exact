@@ -143,6 +143,57 @@ func TestScrapeRunner_Run(t *testing.T) {
 		}
 	})
 
+	t.Run("HTML解析は入力スライスを変更しない", func(t *testing.T) {
+		original := []ports.URLResult{
+			{
+				URL:         "http://html.com",
+				Content:     "<html><body><main><p>HTML body text long enough to extract.</p></main></body></html>",
+				ContentType: "text/html",
+			},
+		}
+		extractor := &mockExtractor{
+			extractReaderFunc: func(ctx context.Context, reader io.Reader) (string, bool, error) {
+				return "extracted body", true, nil
+			},
+		}
+
+		r := NewScrapeRunner(&mockScraper{}, extractor, fastOpts...)
+		results := r.extractHTMLResults(context.Background(), original)
+
+		if original[0].Content == "extracted body" {
+			t.Fatal("入力スライスは変更されないべきなのだ")
+		}
+		if results[0].Content != "extracted body" {
+			t.Errorf("返却スライスには解析後の本文が入るべきなのだ。got: %q", results[0].Content)
+		}
+	})
+
+	t.Run("キャンセル済みの場合はHTML解析を開始しない", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		original := []ports.URLResult{
+			{
+				URL:         "http://html.com",
+				Content:     "<html><body><main><p>HTML body text long enough to extract.</p></main></body></html>",
+				ContentType: "text/html",
+			},
+		}
+		extractor := &mockExtractor{
+			extractReaderFunc: func(ctx context.Context, reader io.Reader) (string, bool, error) {
+				t.Fatal("キャンセル済みの場合はExtractTextを呼ばないべきなのだ")
+				return "", false, nil
+			},
+		}
+
+		r := NewScrapeRunner(&mockScraper{}, extractor, fastOpts...)
+		results := r.extractHTMLResults(ctx, original)
+
+		if results[0].Error == nil {
+			t.Fatal("キャンセル済みの場合はエラーが設定されるべきなのだ")
+		}
+	})
+
 	t.Run("リトライ中にコンテキストがキャンセルされた場合", func(t *testing.T) {
 		scraper := &mockScraper{
 			runFunc: func(ctx context.Context, urls []string) []ports.URLResult {

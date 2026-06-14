@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"mime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/shouni/go-web-exact/v2/ports"
@@ -98,24 +99,39 @@ func (r *ScrapeRunner) Run(ctx context.Context, urls []string) []ports.URLResult
 
 // extractHTMLResults は、HTTP取得済みのHTMLコンテンツを抽出済みテキストに変換します。
 func (r *ScrapeRunner) extractHTMLResults(ctx context.Context, results []ports.URLResult) []ports.URLResult {
-	for i := range results {
-		res := &results[i]
-		if res.Error != nil || res.Content == "" || !isHTMLContentType(res.ContentType) {
-			continue
-		}
+	extracted := make([]ports.URLResult, len(results))
+	var wg sync.WaitGroup
 
-		content, hasBody, err := r.extractor.ExtractText(ctx, strings.NewReader(res.Content))
-		if err != nil {
-			res.Error = fmt.Errorf("HTML解析失敗: %w", err)
-			continue
-		}
-		if content == "" || !hasBody {
-			res.Error = fmt.Errorf("URL %s から有効な本文を検出できませんでした", res.URL)
-			continue
-		}
-		res.Content = content
+	for i, res := range results {
+		wg.Add(1)
+		go func(i int, res ports.URLResult) {
+			defer wg.Done()
+
+			extracted[i] = res
+			if res.Error != nil || res.Content == "" || !isHTMLContentType(res.ContentType) {
+				return
+			}
+
+			if err := ctx.Err(); err != nil {
+				extracted[i].Error = fmt.Errorf("処理がキャンセルされました: %w", err)
+				return
+			}
+
+			content, hasBody, err := r.extractor.ExtractText(ctx, strings.NewReader(res.Content))
+			if err != nil {
+				extracted[i].Error = fmt.Errorf("HTML解析失敗: %w", err)
+				return
+			}
+			if content == "" || !hasBody {
+				extracted[i].Error = fmt.Errorf("URL %s から有効な本文を検出できませんでした", res.URL)
+				return
+			}
+			extracted[i].Content = content
+		}(i, res)
 	}
-	return results
+
+	wg.Wait()
+	return extracted
 }
 
 // retry は、失敗したURLに対して逐次抽出を試みます。
@@ -174,6 +190,8 @@ func isHTMLContentType(contentType string) bool {
 
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
+		// 不正なContent-TypeヘッダーでもHTML判定できるよう、
+		// セミコロンより前の部分だけをMIMEタイプとして扱います。
 		mediaType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
 	}
 
