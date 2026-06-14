@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -56,8 +57,16 @@ func (e *Extractor) FetchAndExtractText(ctx context.Context, url string) (text s
 		return "", false, err
 	}
 
-	// 2. Extractor内でgoquery.Documentに変換 (解析の責務)
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(htmlBytes))
+	return e.ExtractText(ctx, bytes.NewReader(htmlBytes))
+}
+
+// ExtractText は取得済みのHTMLコンテンツから整形されたテキストを抽出します。
+func (e *Extractor) ExtractText(ctx context.Context, reader io.Reader) (text string, hasBodyFound bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return "", false, err
+	}
+
+	doc, err := goquery.NewDocumentFromReader(reader)
 	if err != nil {
 		return "", false, fmt.Errorf("HTML解析に失敗しました: %w", err)
 	}
