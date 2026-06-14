@@ -12,7 +12,9 @@ type Fetcher interface {
 
 // Extractor はHTMLコンテンツからテキストを抽出するためのインターフェースです。
 type Extractor interface {
+	// ExtractText は取得済みのHTMLコンテンツから本文テキストを抽出します。
 	ExtractText(ctx context.Context, reader io.Reader) (string, bool, error)
+	// FetchAndExtractText はURLからHTMLを取得し、本文テキストを抽出します。
 	FetchAndExtractText(ctx context.Context, url string) (string, bool, error)
 }
 

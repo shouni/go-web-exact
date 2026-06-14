@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +22,8 @@ func (m *mockScraper) Run(ctx context.Context, urls []string) []ports.URLResult 
 
 // mockExtractor は ports.Extractor のモックなのだ
 type mockExtractor struct {
-	extractFunc func(ctx context.Context, url string) (string, bool, error)
+	extractFunc       func(ctx context.Context, url string) (string, bool, error)
+	extractReaderFunc func(ctx context.Context, reader io.Reader) (string, bool, error)
 }
 
 func (m *mockExtractor) FetchAndExtractText(ctx context.Context, url string) (string, bool, error) {
@@ -29,6 +31,9 @@ func (m *mockExtractor) FetchAndExtractText(ctx context.Context, url string) (st
 }
 
 func (m *mockExtractor) ExtractText(ctx context.Context, reader io.Reader) (string, bool, error) {
+	if m.extractReaderFunc != nil {
+		return m.extractReaderFunc(ctx, reader)
+	}
 	return "", false, errors.New("unexpected ExtractText call")
 }
 
@@ -79,6 +84,62 @@ func TestScrapeRunner_Run(t *testing.T) {
 
 		if len(results) != 2 {
 			t.Errorf("リトライを含めて2件成功すべきなのだ。got: %d", len(results))
+		}
+	})
+
+	t.Run("初回結果がHTMLの場合は本文を解析する", func(t *testing.T) {
+		scraper := &mockScraper{
+			runFunc: func(ctx context.Context, urls []string) []ports.URLResult {
+				return []ports.URLResult{
+					{
+						URL:         "http://html.com",
+						Content:     "<html><body><main><p>HTML body text long enough to extract.</p></main></body></html>",
+						ContentType: "text/html; charset=utf-8",
+					},
+				}
+			},
+		}
+		extractor := &mockExtractor{
+			extractReaderFunc: func(ctx context.Context, reader io.Reader) (string, bool, error) {
+				body, err := io.ReadAll(reader)
+				if err != nil {
+					return "", false, err
+				}
+				if !strings.Contains(string(body), "<html>") {
+					return "", false, errors.New("HTMLが渡されていません")
+				}
+				return "extracted body", true, nil
+			},
+		}
+
+		r := NewScrapeRunner(scraper, extractor, fastOpts...)
+		results := r.Run(context.Background(), []string{"http://html.com"})
+
+		if len(results) != 1 {
+			t.Fatalf("結果は1件であるべきだが %d 件だったのだ", len(results))
+		}
+		if results[0].Content != "extracted body" {
+			t.Errorf("HTML解析後の本文が返るべきなのだ。got: %q", results[0].Content)
+		}
+	})
+
+	t.Run("初回結果がHTML以外の場合は解析しない", func(t *testing.T) {
+		scraper := &mockScraper{
+			runFunc: func(ctx context.Context, urls []string) []ports.URLResult {
+				return []ports.URLResult{
+					{URL: "http://plain.com", Content: "plain extracted body", ContentType: "text/plain"},
+				}
+			},
+		}
+
+		r := NewScrapeRunner(scraper, &mockExtractor{}, fastOpts...)
+		results := r.Run(context.Background(), []string{"http://plain.com"})
+
+		if len(results) != 1 {
+			t.Fatalf("結果は1件であるべきだが %d 件だったのだ", len(results))
+		}
+		if results[0].Content != "plain extracted body" {
+			t.Errorf("HTML以外はそのまま返るべきなのだ。got: %q", results[0].Content)
 		}
 	})
 
