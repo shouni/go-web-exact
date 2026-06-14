@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"mime"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -100,36 +101,58 @@ func (r *ScrapeRunner) Run(ctx context.Context, urls []string) []ports.URLResult
 // extractHTMLResults は、HTTP取得済みのHTMLコンテンツを抽出済みテキストに変換します。
 func (r *ScrapeRunner) extractHTMLResults(ctx context.Context, results []ports.URLResult) []ports.URLResult {
 	extracted := make([]ports.URLResult, len(results))
-	var wg sync.WaitGroup
-
-	for i, res := range results {
-		wg.Add(1)
-		go func(i int, res ports.URLResult) {
-			defer wg.Done()
-
-			extracted[i] = res
-			if res.Error != nil || res.Content == "" || !isHTMLContentType(res.ContentType) {
-				return
-			}
-
-			if err := ctx.Err(); err != nil {
-				extracted[i].Error = fmt.Errorf("処理がキャンセルされました: %w", err)
-				return
-			}
-
-			content, hasBody, err := r.extractor.ExtractText(ctx, strings.NewReader(res.Content))
-			if err != nil {
-				extracted[i].Error = fmt.Errorf("HTML解析失敗: %w", err)
-				return
-			}
-			if content == "" || !hasBody {
-				extracted[i].Error = fmt.Errorf("URL %s から有効な本文を検出できませんでした", res.URL)
-				return
-			}
-			extracted[i].Content = content
-		}(i, res)
+	type htmlJob struct {
+		index  int
+		result ports.URLResult
 	}
 
+	jobs := make(chan htmlJob)
+	var wg sync.WaitGroup
+
+	workerCount := runtime.GOMAXPROCS(0)
+	for range workerCount {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for job := range jobs {
+				res := job.result
+				i := job.index
+
+				if err := ctx.Err(); err != nil {
+					extracted[i].Error = fmt.Errorf("処理がキャンセルされました: %w", err)
+					continue
+				}
+
+				content, hasBody, err := r.extractor.ExtractText(ctx, strings.NewReader(res.Content))
+				if err != nil {
+					extracted[i].Error = fmt.Errorf("HTML解析失敗: %w", err)
+					continue
+				}
+				if content == "" || !hasBody {
+					extracted[i].Error = fmt.Errorf("URL %s から有効な本文を検出できませんでした", res.URL)
+					continue
+				}
+				extracted[i].Content = content
+			}
+		}()
+	}
+
+	for i, res := range results {
+		extracted[i] = res
+		if res.Error != nil || res.Content == "" || !isHTMLContentType(res.ContentType) {
+			continue
+		}
+
+		if err := ctx.Err(); err != nil {
+			extracted[i].Error = fmt.Errorf("処理がキャンセルされました: %w", err)
+			continue
+		}
+
+		jobs <- htmlJob{index: i, result: res}
+	}
+
+	close(jobs)
 	wg.Wait()
 	return extracted
 }
@@ -195,7 +218,7 @@ func isHTMLContentType(contentType string) bool {
 		mediaType = strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
 	}
 
-	switch strings.ToLower(mediaType) {
+	switch mediaType {
 	case "text/html", "application/xhtml+xml":
 		return true
 	default:
