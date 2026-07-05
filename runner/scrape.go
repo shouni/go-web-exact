@@ -1,7 +1,9 @@
+// Package runner は、並列スクレイピングの実行フェーズと失敗時の逐次リトライを制御します。
 package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"mime"
@@ -28,6 +30,7 @@ type ScrapeRunner struct {
 	extractor          ports.Extractor
 	initialScrapeDelay time.Duration
 	retryScrapeDelay   time.Duration
+	htmlWorkerCount    int
 }
 
 // Option は ScrapeRunner の挙動をカスタマイズするための関数型です。
@@ -43,6 +46,16 @@ func WithRetryDelay(d time.Duration) Option {
 	return func(r *ScrapeRunner) { r.retryScrapeDelay = d }
 }
 
+// WithHTMLWorkerCount はHTML解析の並列ワーカー数を設定します。
+// 未設定またはn<=0の場合は runtime.GOMAXPROCS(0) が使用されます。
+func WithHTMLWorkerCount(n int) Option {
+	return func(r *ScrapeRunner) {
+		if n > 0 {
+			r.htmlWorkerCount = n
+		}
+	}
+}
+
 // NewScrapeRunner は依存関係とオプションを適用して Runner を生成します。
 func NewScrapeRunner(scraper ports.Scraper, extractor ports.Extractor, opts ...Option) *ScrapeRunner {
 	r := &ScrapeRunner{
@@ -50,6 +63,7 @@ func NewScrapeRunner(scraper ports.Scraper, extractor ports.Extractor, opts ...O
 		extractor:          extractor,
 		initialScrapeDelay: DefaultInitialDelay,
 		retryScrapeDelay:   DefaultRetryDelay,
+		htmlWorkerCount:    runtime.GOMAXPROCS(0),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -109,12 +123,8 @@ func (r *ScrapeRunner) extractHTMLResults(ctx context.Context, results []ports.U
 	jobs := make(chan htmlJob)
 	var wg sync.WaitGroup
 
-	workerCount := runtime.GOMAXPROCS(0)
-	for range workerCount {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+	for range r.htmlWorkerCount {
+		wg.Go(func() {
 			for job := range jobs {
 				res := job.result
 				i := job.index
@@ -135,7 +145,7 @@ func (r *ScrapeRunner) extractHTMLResults(ctx context.Context, results []ports.U
 				}
 				extracted[i].Content = content
 			}
-		}()
+		})
 	}
 
 	for i, res := range results {
@@ -252,15 +262,23 @@ func splitResults(results []ports.URLResult) (successes []ports.URLResult, faile
 }
 
 // simplifyError は、ログ出力用に冗長なエラーメッセージを整理します。
-// TODO: 下位パッケージでカスタムエラー型を定義し、errors.As による判定へ移行することを推奨。
+// errors.Unwrap でエラーチェーンを最も内側まで辿ることで、リトライ処理由来の
+// 定型的なラップ文言（例: "最大リトライ回数を超えました。最終エラー: "）に
+// 文字列として依存せず、本質的な失敗理由だけを取り出します。
 func simplifyError(err error) string {
-	msg := err.Error()
-	// 暫定的な文字列パース（将来の型判定導入までの繋ぎなのだ）
-	if idx := strings.Index(msg, ", ボディ: <!"); idx != -1 {
-		msg = msg[:idx]
+	innermost := err
+	for {
+		unwrapped := errors.Unwrap(innermost)
+		if unwrapped == nil {
+			break
+		}
+		innermost = unwrapped
 	}
-	if idx := strings.LastIndex(msg, "最終エラー:"); idx != -1 {
-		return strings.TrimSpace(msg[idx:])
+
+	msg := innermost.Error()
+	// HTTPエラーレスポンスのボディ全文が含まれる場合はログが冗長になるため切り詰める
+	if idx := strings.Index(msg, ", ボディ: "); idx != -1 {
+		msg = msg[:idx]
 	}
 	return msg
 }

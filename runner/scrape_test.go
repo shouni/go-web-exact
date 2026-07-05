@@ -3,8 +3,11 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -46,7 +49,7 @@ func TestScrapeRunner_Run(t *testing.T) {
 
 	t.Run("初回で全件成功する場合", func(t *testing.T) {
 		scraper := &mockScraper{
-			runFunc: func(ctx context.Context, urls []string) []ports.URLResult {
+			runFunc: func(_ context.Context, _ []string) []ports.URLResult {
 				return []ports.URLResult{
 					{URL: "http://ok1.com", Content: "body1"},
 					{URL: "http://ok2.com", Content: "body2"},
@@ -63,7 +66,7 @@ func TestScrapeRunner_Run(t *testing.T) {
 
 	t.Run("初回で一部失敗しリトライで救済される場合", func(t *testing.T) {
 		scraper := &mockScraper{
-			runFunc: func(ctx context.Context, urls []string) []ports.URLResult {
+			runFunc: func(_ context.Context, _ []string) []ports.URLResult {
 				return []ports.URLResult{
 					{URL: "http://ok.com", Content: "body_ok"},
 					{URL: "http://retry.com", Error: errors.New("temporary error")},
@@ -71,7 +74,7 @@ func TestScrapeRunner_Run(t *testing.T) {
 			},
 		}
 		extractor := &mockExtractor{
-			extractFunc: func(ctx context.Context, url string) (string, bool, error) {
+			extractFunc: func(_ context.Context, url string) (string, bool, error) {
 				if url == "http://retry.com" {
 					return "body_retried", true, nil
 				}
@@ -89,7 +92,7 @@ func TestScrapeRunner_Run(t *testing.T) {
 
 	t.Run("初回結果がHTMLの場合は本文を解析する", func(t *testing.T) {
 		scraper := &mockScraper{
-			runFunc: func(ctx context.Context, urls []string) []ports.URLResult {
+			runFunc: func(_ context.Context, _ []string) []ports.URLResult {
 				return []ports.URLResult{
 					{
 						URL:         "http://html.com",
@@ -100,7 +103,7 @@ func TestScrapeRunner_Run(t *testing.T) {
 			},
 		}
 		extractor := &mockExtractor{
-			extractReaderFunc: func(ctx context.Context, reader io.Reader) (string, bool, error) {
+			extractReaderFunc: func(_ context.Context, reader io.Reader) (string, bool, error) {
 				body, err := io.ReadAll(reader)
 				if err != nil {
 					return "", false, err
@@ -125,7 +128,7 @@ func TestScrapeRunner_Run(t *testing.T) {
 
 	t.Run("初回結果がHTML以外の場合は解析しない", func(t *testing.T) {
 		scraper := &mockScraper{
-			runFunc: func(ctx context.Context, urls []string) []ports.URLResult {
+			runFunc: func(_ context.Context, _ []string) []ports.URLResult {
 				return []ports.URLResult{
 					{URL: "http://plain.com", Content: "plain extracted body", ContentType: "text/plain"},
 				}
@@ -152,7 +155,7 @@ func TestScrapeRunner_Run(t *testing.T) {
 			},
 		}
 		extractor := &mockExtractor{
-			extractReaderFunc: func(ctx context.Context, reader io.Reader) (string, bool, error) {
+			extractReaderFunc: func(_ context.Context, _ io.Reader) (string, bool, error) {
 				return "extracted body", true, nil
 			},
 		}
@@ -180,7 +183,7 @@ func TestScrapeRunner_Run(t *testing.T) {
 			},
 		}
 		extractor := &mockExtractor{
-			extractReaderFunc: func(ctx context.Context, reader io.Reader) (string, bool, error) {
+			extractReaderFunc: func(_ context.Context, _ io.Reader) (string, bool, error) {
 				t.Fatal("キャンセル済みの場合はExtractTextを呼ばないべきなのだ")
 				return "", false, nil
 			},
@@ -196,7 +199,7 @@ func TestScrapeRunner_Run(t *testing.T) {
 
 	t.Run("リトライ中にコンテキストがキャンセルされた場合", func(t *testing.T) {
 		scraper := &mockScraper{
-			runFunc: func(ctx context.Context, urls []string) []ports.URLResult {
+			runFunc: func(_ context.Context, _ []string) []ports.URLResult {
 				return []ports.URLResult{
 					{URL: "http://ok.com", Content: "body_ok"},
 					{URL: "http://retry.com", Error: errors.New("fail")},
@@ -218,12 +221,12 @@ func TestScrapeRunner_Run(t *testing.T) {
 
 	t.Run("全ての取得に失敗し空のスライスが返る場合", func(t *testing.T) {
 		scraper := &mockScraper{
-			runFunc: func(ctx context.Context, urls []string) []ports.URLResult {
+			runFunc: func(_ context.Context, _ []string) []ports.URLResult {
 				return []ports.URLResult{{URL: "http://fail.com", Error: errors.New("fail")}}
 			},
 		}
 		extractor := &mockExtractor{
-			extractFunc: func(ctx context.Context, url string) (string, bool, error) {
+			extractFunc: func(_ context.Context, _ string) (string, bool, error) {
 				return "", false, errors.New("fail again")
 			},
 		}
@@ -233,6 +236,100 @@ func TestScrapeRunner_Run(t *testing.T) {
 
 		if len(results) != 0 {
 			t.Error("全件失敗時は空のスライスが返るべきなのだ")
+		}
+	})
+}
+
+func TestWithHTMLWorkerCount(t *testing.T) {
+	t.Run("デフォルトはruntime.GOMAXPROCS(0)が使われる", func(t *testing.T) {
+		r := NewScrapeRunner(&mockScraper{}, &mockExtractor{})
+		if r.htmlWorkerCount != runtime.GOMAXPROCS(0) {
+			t.Errorf("got: %d, want: %d", r.htmlWorkerCount, runtime.GOMAXPROCS(0))
+		}
+	})
+
+	t.Run("正の値を指定するとその値が使われる", func(t *testing.T) {
+		r := NewScrapeRunner(&mockScraper{}, &mockExtractor{}, WithHTMLWorkerCount(1))
+		if r.htmlWorkerCount != 1 {
+			t.Errorf("got: %d, want: 1", r.htmlWorkerCount)
+		}
+	})
+
+	t.Run("0以下の値は無視されデフォルトのままになる", func(t *testing.T) {
+		r := NewScrapeRunner(&mockScraper{}, &mockExtractor{}, WithHTMLWorkerCount(0))
+		if r.htmlWorkerCount != runtime.GOMAXPROCS(0) {
+			t.Errorf("got: %d, want: %d", r.htmlWorkerCount, runtime.GOMAXPROCS(0))
+		}
+	})
+
+	t.Run("ワーカー数を1に制限すると同時実行数も1になる", func(t *testing.T) {
+		var mu sync.Mutex
+		inFlight := 0
+		maxObserved := 0
+
+		extractor := &mockExtractor{
+			extractReaderFunc: func(_ context.Context, _ io.Reader) (string, bool, error) {
+				mu.Lock()
+				inFlight++
+				if inFlight > maxObserved {
+					maxObserved = inFlight
+				}
+				mu.Unlock()
+
+				time.Sleep(10 * time.Millisecond)
+
+				mu.Lock()
+				inFlight--
+				mu.Unlock()
+				return "extracted", true, nil
+			},
+		}
+
+		var results []ports.URLResult
+		for range 5 {
+			results = append(results, ports.URLResult{
+				URL:         "http://html.com",
+				Content:     "<html><body><main><p>HTML body text long enough to extract.</p></main></body></html>",
+				ContentType: "text/html",
+			})
+		}
+
+		r := NewScrapeRunner(&mockScraper{}, extractor, WithHTMLWorkerCount(1))
+		r.extractHTMLResults(context.Background(), results)
+
+		if maxObserved != 1 {
+			t.Errorf("ワーカー数1の場合、同時実行数は1であるべきなのだ。got: %d", maxObserved)
+		}
+	})
+}
+
+func TestSimplifyError(t *testing.T) {
+	t.Run("ラップされていないエラーはそのまま返る", func(t *testing.T) {
+		err := errors.New("単純なエラー")
+		if got := simplifyError(err); got != "単純なエラー" {
+			t.Errorf("got: %q", got)
+		}
+	})
+
+	t.Run("多重ラップされたエラーは最も内側のメッセージまで辿る", func(t *testing.T) {
+		inner := errors.New("最終エラー: 接続タイムアウト")
+		retryWrapped := fmt.Errorf("処理に失敗しました: 最大リトライ回数 (3回) を超えました。最終エラー: %w", inner)
+		outerWrapped := fmt.Errorf("リトライ抽出失敗: %w", retryWrapped)
+
+		got := simplifyError(outerWrapped)
+		if got != "最終エラー: 接続タイムアウト" {
+			t.Errorf("got: %q", got)
+		}
+	})
+
+	t.Run("HTTPエラーのボディ全文はログ用に切り詰められる", func(t *testing.T) {
+		inner := errors.New("HTTPクライアントエラー (非リトライ対象): ステータスコード 500, ボディ: \"<!DOCTYPE html>...\"")
+		wrapped := fmt.Errorf("リトライ抽出失敗: %w", inner)
+
+		got := simplifyError(wrapped)
+		want := "HTTPクライアントエラー (非リトライ対象): ステータスコード 500"
+		if got != want {
+			t.Errorf("got: %q, want: %q", got, want)
 		}
 	})
 }

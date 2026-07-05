@@ -1,3 +1,4 @@
+// Package builder は、Fetcher から Extractor・Scraper・ScrapeRunner までの依存関係を組み立てます。
 package builder
 
 import (
@@ -16,13 +17,14 @@ type Builder struct {
 }
 
 // New は、ScraperBuilderのインスタンスを返します。
-func New(fetcher ports.Fetcher, opts []scraper.Option) (*Builder, error) {
+// runnerOpts で ScrapeRunner の挙動（HTMLワーカー数、待機時間など）をカスタマイズできます。
+func New(fetcher ports.Fetcher, opts []scraper.Option, runnerOpts ...runner.Option) (*Builder, error) {
 	extractor, err := extract.NewExtractor(fetcher)
 	if err != nil {
-		return nil, fmt.Errorf("Extractorの初期化エラー: %w", err)
+		return nil, fmt.Errorf("extractorの初期化エラー: %w", err)
 	}
 	coreScraper := scraper.New(extractor, opts...)
-	scrapeRunner := runner.NewScrapeRunner(coreScraper, extractor)
+	scrapeRunner := runner.NewScrapeRunner(coreScraper, extractor, runnerOpts...)
 
 	return &Builder{
 		fetcher: fetcher,

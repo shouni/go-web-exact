@@ -1,3 +1,4 @@
+// Package ports は、フェッチ・抽出・実行の各コンポーネントを疎結合にする共通インターフェースを定義します。
 package ports
 
 import (

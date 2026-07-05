@@ -1,3 +1,4 @@
+// Package extract は、HTMLコンテンツから本文テキストを高精度に抽出します。
 package extract
 
 import (
@@ -95,19 +96,20 @@ func (e *Extractor) extractContentText(doc *goquery.Document) (text string, hasB
 	//    goqueryは重複を排除し、DOMの深さ優先探索順序で要素を返します。
 	contentSelectors := textExtractionTags + ", table, pre"
 
-	mainContent.Find(contentSelectors).Each(func(i int, s *goquery.Selection) {
+	mainContent.Find(contentSelectors).Each(func(_ int, s *goquery.Selection) {
 		var content string
 
-		if s.Is("table") {
+		switch {
+		case s.Is("table"):
 			// テーブルの処理
 			content = processTable(s)
-		} else if s.Is("pre") {
+		case s.Is("pre"):
 			// pre タグ (コードブロック) の処理
 			preText := strings.TrimSpace(s.Text())
 			if preText != "" {
 				content = "```\n" + preText + "\n```"
 			}
-		} else {
+		default:
 			// 一般的なテキスト要素 (p, h*, li, blockquote) の処理
 			content = e.processGeneralElement(s)
 		}
@@ -125,8 +127,7 @@ func (e *Extractor) extractContentText(doc *goquery.Document) (text string, hasB
 func (e *Extractor) findMainContent(doc *goquery.Document) *goquery.Selection {
 	mainContent := doc.Find(mainContentSelectors).First()
 	if mainContent.Length() == 0 {
-		mainContent = doc.Selection.
-			Not("header, footer, nav, aside, .sidebar, script, style, form")
+		mainContent = doc.Not("header, footer, nav, aside, .sidebar, script, style, form")
 	}
 	return mainContent
 }
@@ -139,18 +140,18 @@ func (e *Extractor) processGeneralElement(s *goquery.Selection) string {
 	// s の子孫から pre, table を除外してテキストを抽出する再帰ヘルパー関数
 	var extractText func(sel *goquery.Selection)
 	extractText = func(sel *goquery.Selection) {
-		sel.Contents().Each(func(i int, child *goquery.Selection) {
+		sel.Contents().Each(func(_ int, child *goquery.Selection) {
 			node := child.Get(0) // *html.Node を取得
 
 			if node == nil {
 				return
 			}
 
-			// テキストノードの場合
-			if node.Type == html.TextNode {
+			switch node.Type {
+			case html.TextNode:
 				// テキストノードの内容は node.Data に格納されている
 				builder.WriteString(node.Data)
-			} else if node.Type == html.ElementNode {
+			case html.ElementNode:
 				// 要素ノードの場合
 				if child.Is("pre") || child.Is("table") {
 					// pre または table 要素はスキップ
@@ -193,9 +194,9 @@ func processTable(s *goquery.Selection) string { // パッケージレベル関�
 	if captionText != "" {
 		tableContent = append(tableContent, tableCaptionPrefix+captionText)
 	}
-	s.Find("tr").Each(func(rowIndex int, row *goquery.Selection) {
+	s.Find("tr").Each(func(_ int, row *goquery.Selection) {
 		var rowTexts []string
-		row.Find("th, td").Each(func(cellIndex int, cell *goquery.Selection) {
+		row.Find("th, td").Each(func(_ int, cell *goquery.Selection) {
 			rowTexts = append(rowTexts, text.NormalizeText(cell.Text()))
 		})
 		tableContent = append(tableContent, strings.Join(rowTexts, " | "))

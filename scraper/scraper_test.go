@@ -20,14 +20,14 @@ func (m *mockExtractor) FetchAndExtractText(ctx context.Context, url string) (st
 	return m.fetchFunc(ctx, url)
 }
 
-func (m *mockExtractor) ExtractText(ctx context.Context, reader io.Reader) (string, bool, error) {
+func (m *mockExtractor) ExtractText(_ context.Context, _ io.Reader) (string, bool, error) {
 	return "", false, errors.New("unexpected ExtractText call")
 }
 
 func TestConcurrent_Run(t *testing.T) {
 	t.Run("正常系: すべてのURLからコンテンツが抽出できること", func(t *testing.T) {
 		mock := &mockExtractor{
-			fetchFunc: func(ctx context.Context, url string) (string, bool, error) {
+			fetchFunc: func(_ context.Context, url string) (string, bool, error) {
 				return "content for " + url, true, nil
 			},
 		}
@@ -55,7 +55,7 @@ func TestConcurrent_Run(t *testing.T) {
 
 	t.Run("異常系: Extractorがエラーを返す場合に結果に含まれること", func(t *testing.T) {
 		mock := &mockExtractor{
-			fetchFunc: func(ctx context.Context, url string) (string, bool, error) {
+			fetchFunc: func(_ context.Context, _ string) (string, bool, error) {
 				return "", false, errors.New("network error")
 			},
 		}
@@ -72,7 +72,7 @@ func TestConcurrent_Run(t *testing.T) {
 
 	t.Run("異常系: 本文が見つからない場合にエラーとして処理されること", func(t *testing.T) {
 		mock := &mockExtractor{
-			fetchFunc: func(ctx context.Context, url string) (string, bool, error) {
+			fetchFunc: func(_ context.Context, _ string) (string, bool, error) {
 				return "", false, nil // hasBodyFound = false
 			},
 		}
@@ -89,7 +89,7 @@ func TestConcurrent_Run(t *testing.T) {
 
 	t.Run("レートリミットの検証: 短時間で大量のリクエストを送った際に時間がかかること", func(t *testing.T) {
 		mock := &mockExtractor{
-			fetchFunc: func(ctx context.Context, url string) (string, bool, error) {
+			fetchFunc: func(_ context.Context, _ string) (string, bool, error) {
 				return "ok", true, nil
 			},
 		}
