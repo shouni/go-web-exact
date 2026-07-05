@@ -1,3 +1,4 @@
+// Package runner は、並列スクレイピングの実行フェーズと失敗時の逐次リトライを制御します。
 package runner
 
 import (
@@ -29,6 +30,7 @@ type ScrapeRunner struct {
 	extractor          ports.Extractor
 	initialScrapeDelay time.Duration
 	retryScrapeDelay   time.Duration
+	htmlWorkerCount    int
 }
 
 // Option は ScrapeRunner の挙動をカスタマイズするための関数型です。
@@ -44,6 +46,16 @@ func WithRetryDelay(d time.Duration) Option {
 	return func(r *ScrapeRunner) { r.retryScrapeDelay = d }
 }
 
+// WithHTMLWorkerCount はHTML解析の並列ワーカー数を設定します。
+// 未設定またはn<=0の場合は runtime.GOMAXPROCS(0) が使用されます。
+func WithHTMLWorkerCount(n int) Option {
+	return func(r *ScrapeRunner) {
+		if n > 0 {
+			r.htmlWorkerCount = n
+		}
+	}
+}
+
 // NewScrapeRunner は依存関係とオプションを適用して Runner を生成します。
 func NewScrapeRunner(scraper ports.Scraper, extractor ports.Extractor, opts ...Option) *ScrapeRunner {
 	r := &ScrapeRunner{
@@ -51,6 +63,7 @@ func NewScrapeRunner(scraper ports.Scraper, extractor ports.Extractor, opts ...O
 		extractor:          extractor,
 		initialScrapeDelay: DefaultInitialDelay,
 		retryScrapeDelay:   DefaultRetryDelay,
+		htmlWorkerCount:    runtime.GOMAXPROCS(0),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -110,12 +123,8 @@ func (r *ScrapeRunner) extractHTMLResults(ctx context.Context, results []ports.U
 	jobs := make(chan htmlJob)
 	var wg sync.WaitGroup
 
-	workerCount := runtime.GOMAXPROCS(0)
-	for range workerCount {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+	for range r.htmlWorkerCount {
+		wg.Go(func() {
 			for job := range jobs {
 				res := job.result
 				i := job.index
@@ -136,7 +145,7 @@ func (r *ScrapeRunner) extractHTMLResults(ctx context.Context, results []ports.U
 				}
 				extracted[i].Content = content
 			}
-		}()
+		})
 	}
 
 	for i, res := range results {

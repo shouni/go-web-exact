@@ -1,3 +1,4 @@
+// Package scraper は、レート制限付きの並列スクレイピングエンジンを提供します。
 package scraper
 
 import (

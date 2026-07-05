@@ -6,10 +6,10 @@ import "time"
 type Option func(*Concurrent)
 
 // WithMaxConcurrency は最大並列を設定します。
-func WithMaxConcurrency(max int) Option {
+func WithMaxConcurrency(maxConcurrency int) Option {
 	return func(c *Concurrent) {
-		if max > 0 {
-			c.maxConcurrency = max
+		if maxConcurrency > 0 {
+			c.maxConcurrency = maxConcurrency
 		}
 	}
 }
