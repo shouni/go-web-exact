@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -233,6 +234,37 @@ func TestScrapeRunner_Run(t *testing.T) {
 
 		if len(results) != 0 {
 			t.Error("全件失敗時は空のスライスが返るべきなのだ")
+		}
+	})
+}
+
+func TestSimplifyError(t *testing.T) {
+	t.Run("ラップされていないエラーはそのまま返る", func(t *testing.T) {
+		err := errors.New("単純なエラー")
+		if got := simplifyError(err); got != "単純なエラー" {
+			t.Errorf("got: %q", got)
+		}
+	})
+
+	t.Run("多重ラップされたエラーは最も内側のメッセージまで辿る", func(t *testing.T) {
+		inner := errors.New("最終エラー: 接続タイムアウト")
+		retryWrapped := fmt.Errorf("処理に失敗しました: 最大リトライ回数 (3回) を超えました。最終エラー: %w", inner)
+		outerWrapped := fmt.Errorf("リトライ抽出失敗: %w", retryWrapped)
+
+		got := simplifyError(outerWrapped)
+		if got != "最終エラー: 接続タイムアウト" {
+			t.Errorf("got: %q", got)
+		}
+	})
+
+	t.Run("HTTPエラーのボディ全文はログ用に切り詰められる", func(t *testing.T) {
+		inner := errors.New("HTTPクライアントエラー (非リトライ対象): ステータスコード 500, ボディ: \"<!DOCTYPE html>...\"")
+		wrapped := fmt.Errorf("リトライ抽出失敗: %w", inner)
+
+		got := simplifyError(wrapped)
+		want := "HTTPクライアントエラー (非リトライ対象): ステータスコード 500"
+		if got != want {
+			t.Errorf("got: %q, want: %q", got, want)
 		}
 	})
 }

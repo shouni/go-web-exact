@@ -2,7 +2,7 @@ package scraper
 
 import "time"
 
-// Option はParallelScraperの設定を行うための関数型です。
+// Option はConcurrentの設定を行うための関数型です。
 type Option func(*Concurrent)
 
 // WithMaxConcurrency は最大並列を設定します。
@@ -14,7 +14,7 @@ func WithMaxConcurrency(max int) Option {
 	}
 }
 
-// WithRateLimit はリトライの初期間隔を設定します。
+// WithRateLimit はリクエスト間のレート制限間隔を設定します。
 func WithRateLimit(d time.Duration) Option {
 	return func(c *Concurrent) {
 		if d > 0 {

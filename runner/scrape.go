@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"mime"
@@ -252,15 +253,23 @@ func splitResults(results []ports.URLResult) (successes []ports.URLResult, faile
 }
 
 // simplifyError は、ログ出力用に冗長なエラーメッセージを整理します。
-// TODO: 下位パッケージでカスタムエラー型を定義し、errors.As による判定へ移行することを推奨。
+// errors.Unwrap でエラーチェーンを最も内側まで辿ることで、リトライ処理由来の
+// 定型的なラップ文言（例: "最大リトライ回数を超えました。最終エラー: "）に
+// 文字列として依存せず、本質的な失敗理由だけを取り出します。
 func simplifyError(err error) string {
-	msg := err.Error()
-	// 暫定的な文字列パース（将来の型判定導入までの繋ぎなのだ）
-	if idx := strings.Index(msg, ", ボディ: <!"); idx != -1 {
-		msg = msg[:idx]
+	innermost := err
+	for {
+		unwrapped := errors.Unwrap(innermost)
+		if unwrapped == nil {
+			break
+		}
+		innermost = unwrapped
 	}
-	if idx := strings.LastIndex(msg, "最終エラー:"); idx != -1 {
-		return strings.TrimSpace(msg[idx:])
+
+	msg := innermost.Error()
+	// HTTPエラーレスポンスのボディ全文が含まれる場合はログが冗長になるため切り詰める
+	if idx := strings.Index(msg, ", ボディ: "); idx != -1 {
+		msg = msg[:idx]
 	}
 	return msg
 }
