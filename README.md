@@ -1,5 +1,6 @@
 # Go Web Exact
 
+[![CI](https://github.com/shouni/go-web-exact/actions/workflows/ci.yml/badge.svg)](https://github.com/shouni/go-web-exact/actions/workflows/ci.yml)
 [![Language](https://img.shields.io/badge/Language-Go-blue)](https://golang.org/)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/shouni/go-web-exact)](https://golang.org/)
 [![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/shouni/go-web-exact)](https://github.com/shouni/go-web-exact/tags)
