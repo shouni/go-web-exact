@@ -1,4 +1,4 @@
-// Package scraper は、レート制限付きの並列スクレイピングエンジンを提供します。
+// Package scraper は、レート制限付きの並列フェッチエンジンを提供します。
 package scraper
 
 import (
@@ -19,18 +19,19 @@ const (
 	DefaultRateLimit = 200 * time.Millisecond
 )
 
-// Concurrent は、並列かつレート制限を考慮してスクレイピングを実行するエンジンです。
+// Concurrent は、並列かつレート制限を考慮してURLを取得するエンジンです。
+// HTML解析は行わず、取得した生データと Content-Type をそのまま返します（解析は runner が担当）。
 type Concurrent struct {
-	extractor      ports.Extractor
+	fetcher        ports.Fetcher
 	maxConcurrency int
 	rateLimit      time.Duration
 	limiter        *rate.Limiter
 }
 
 // New は Concurrent 構造体を初期化します。
-func New(extractor ports.Extractor, opts ...Option) *Concurrent {
+func New(fetcher ports.Fetcher, opts ...Option) *Concurrent {
 	c := &Concurrent{
-		extractor:      extractor,
+		fetcher:        fetcher,
 		maxConcurrency: DefaultMaxConcurrency,
 		rateLimit:      DefaultRateLimit,
 	}
@@ -43,7 +44,7 @@ func New(extractor ports.Extractor, opts ...Option) *Concurrent {
 	return c
 }
 
-// Run は複数の URL に対して並列スクレイピングを実行します。
+// Run は複数の URL に対して並列フェッチを実行します。
 func (c *Concurrent) Run(ctx context.Context, urls []string) []ports.URLResult {
 	g, gCtx := errgroup.WithContext(ctx)
 	g.SetLimit(c.maxConcurrency)
@@ -57,16 +58,13 @@ func (c *Concurrent) Run(ctx context.Context, urls []string) []ports.URLResult {
 				return nil
 			}
 
-			content, hasBodyFound, err := c.extractor.FetchAndExtractText(gCtx, url)
-
-			var extractErr error
+			body, contentType, err := c.fetcher.FetchBytes(gCtx, url)
 			if err != nil {
-				extractErr = fmt.Errorf("抽出失敗: %w", err)
-			} else if !hasBodyFound {
-				extractErr = fmt.Errorf("URL %s から本文を抽出できませんでした", url)
+				resultsChan <- ports.URLResult{URL: url, Error: fmt.Errorf("取得失敗: %w", err)}
+				return nil
 			}
 
-			resultsChan <- ports.URLResult{URL: url, Content: content, Error: extractErr}
+			resultsChan <- ports.URLResult{URL: url, Content: string(body), ContentType: contentType}
 			return nil
 		})
 	}

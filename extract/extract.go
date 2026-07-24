@@ -53,7 +53,8 @@ const (
 // FetchAndExtractText は指定されたURLからコンテンツを取得し、整形されたテキストを抽出します。
 func (e *Extractor) FetchAndExtractText(ctx context.Context, url string) (text string, hasBodyFound bool, err error) {
 	// 1. Fetcherから生のバイト配列を取得 (通信の責務)
-	htmlBytes, err := e.fetcher.FetchBytes(ctx, url)
+	// Content-Type はこのメソッドでは判定に使わず常に解析を試みるため破棄する
+	htmlBytes, _, err := e.fetcher.FetchBytes(ctx, url)
 	if err != nil {
 		return "", false, err
 	}

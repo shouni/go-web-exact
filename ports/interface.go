@@ -6,9 +6,9 @@ import (
 	"io"
 )
 
-// Fetcher は、HTMLドキュメントの生バイト配列を取得する機能のインターフェースを定義します。
+// Fetcher は、HTMLドキュメントの生バイト配列と Content-Type を取得する機能のインターフェースを定義します。
 type Fetcher interface {
-	FetchBytes(ctx context.Context, url string) ([]byte, error)
+	FetchBytes(ctx context.Context, url string) (body []byte, contentType string, err error)
 }
 
 // Extractor はHTMLコンテンツからテキストを抽出するためのインターフェースです。
