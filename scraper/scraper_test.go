@@ -3,60 +3,56 @@ package scraper
 import (
 	"context"
 	"errors"
-	"io"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// mockExtractor はテスト用の Extractor 実装なのだ。
-type mockExtractor struct {
-	fetchFunc func(ctx context.Context, url string) (string, bool, error)
+// mockFetcher はテスト用の Fetcher 実装なのだ。
+type mockFetcher struct {
+	fetchFunc func(ctx context.Context, url string) ([]byte, string, error)
 	callCount int32
 }
 
-func (m *mockExtractor) FetchAndExtractText(ctx context.Context, url string) (string, bool, error) {
+func (m *mockFetcher) FetchBytes(ctx context.Context, url string) ([]byte, string, error) {
 	atomic.AddInt32(&m.callCount, 1)
 	return m.fetchFunc(ctx, url)
 }
 
-func (m *mockExtractor) ExtractText(_ context.Context, _ io.Reader) (string, bool, error) {
-	return "", false, errors.New("unexpected ExtractText call")
-}
-
 func TestConcurrent_Run(t *testing.T) {
-	t.Run("正常系: すべてのURLからコンテンツが抽出できること", func(t *testing.T) {
-		mock := &mockExtractor{
-			fetchFunc: func(_ context.Context, url string) (string, bool, error) {
-				return "content for " + url, true, nil
+	t.Run("正常系: すべてのURLからコンテンツが取得できること", func(t *testing.T) {
+		mock := &mockFetcher{
+			fetchFunc: func(_ context.Context, url string) ([]byte, string, error) {
+				return []byte("content for " + url), "text/html", nil
 			},
 		}
 
-		// NewParallelScraper -> New に変更
 		s := New(mock, WithMaxConcurrency(2))
 		urls := []string{"http://example.com/1", "http://example.com/2"}
 
-		// ScrapeInParallel -> Run に変更
 		results := s.Run(context.Background(), urls)
 
 		if len(results) != 2 {
 			t.Errorf("期待する結果件数は 2 ですが、%d 件でした", len(results))
 		}
 		if atomic.LoadInt32(&mock.callCount) != 2 {
-			t.Errorf("Extractorの呼び出し回数が不正です: %d", mock.callCount)
+			t.Errorf("Fetcherの呼び出し回数が不正です: %d", mock.callCount)
 		}
 
 		for _, res := range results {
 			if res.Error != nil {
 				t.Errorf("URL %s で予期せぬエラーが発生しました: %v", res.URL, res.Error)
 			}
+			if res.ContentType != "text/html" {
+				t.Errorf("ContentTypeがFetcherの返却値と一致しません: %q", res.ContentType)
+			}
 		}
 	})
 
-	t.Run("異常系: Extractorがエラーを返す場合に結果に含まれること", func(t *testing.T) {
-		mock := &mockExtractor{
-			fetchFunc: func(_ context.Context, _ string) (string, bool, error) {
-				return "", false, errors.New("network error")
+	t.Run("異常系: Fetcherがエラーを返す場合に結果に含まれること", func(t *testing.T) {
+		mock := &mockFetcher{
+			fetchFunc: func(_ context.Context, _ string) ([]byte, string, error) {
+				return nil, "", errors.New("network error")
 			},
 		}
 
@@ -70,27 +66,10 @@ func TestConcurrent_Run(t *testing.T) {
 		}
 	})
 
-	t.Run("異常系: 本文が見つからない場合にエラーとして処理されること", func(t *testing.T) {
-		mock := &mockExtractor{
-			fetchFunc: func(_ context.Context, _ string) (string, bool, error) {
-				return "", false, nil // hasBodyFound = false
-			},
-		}
-
-		s := New(mock)
-		urls := []string{"http://nobody.com"}
-
-		results := s.Run(context.Background(), urls)
-
-		if results[0].Error == nil {
-			t.Error("本文未検出時のエラーが生成されていません")
-		}
-	})
-
 	t.Run("レートリミットの検証: 短時間で大量のリクエストを送った際に時間がかかること", func(t *testing.T) {
-		mock := &mockExtractor{
-			fetchFunc: func(_ context.Context, _ string) (string, bool, error) {
-				return "ok", true, nil
+		mock := &mockFetcher{
+			fetchFunc: func(_ context.Context, _ string) ([]byte, string, error) {
+				return []byte("ok"), "text/html", nil
 			},
 		}
 

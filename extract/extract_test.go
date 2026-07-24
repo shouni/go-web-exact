@@ -23,12 +23,12 @@ type MockFetcher struct {
 
 // FetchBytes はモックされたHTMLをバイト配列として返すか、エラーを返します。
 // 💡 修正: Goの慣習と extract.Fetcher の要件に合わせて引数の順序を (ctx, url) に変更
-func (m *MockFetcher) FetchBytes(_ context.Context, _ string) ([]byte, error) {
+func (m *MockFetcher) FetchBytes(_ context.Context, _ string) ([]byte, string, error) {
 	if m.fetchError != nil {
-		return nil, m.fetchError
+		return nil, "", m.fetchError
 	}
 	// HTMLの内容をそのままバイト配列として返します
-	return []byte(m.htmlContent), nil
+	return []byte(m.htmlContent), "text/html", nil
 }
 
 // ======================================================================

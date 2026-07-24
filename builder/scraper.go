@@ -23,7 +23,7 @@ func New(fetcher ports.Fetcher, opts []scraper.Option, runnerOpts ...runner.Opti
 	if err != nil {
 		return nil, fmt.Errorf("extractorの初期化エラー: %w", err)
 	}
-	coreScraper := scraper.New(extractor, opts...)
+	coreScraper := scraper.New(fetcher, opts...)
 	scrapeRunner := runner.NewScrapeRunner(coreScraper, extractor, runnerOpts...)
 
 	return &Builder{

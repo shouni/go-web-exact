@@ -11,10 +11,10 @@ import (
 
 // mockFetcher は ports.Fetcher のモックなのだ
 type mockFetcher struct {
-	fetchFunc func(ctx context.Context, url string) ([]byte, error)
+	fetchFunc func(ctx context.Context, url string) ([]byte, string, error)
 }
 
-func (m *mockFetcher) FetchBytes(ctx context.Context, url string) ([]byte, error) {
+func (m *mockFetcher) FetchBytes(ctx context.Context, url string) ([]byte, string, error) {
 	return m.fetchFunc(ctx, url)
 }
 
@@ -31,8 +31,8 @@ func TestNew(t *testing.T) {
 
 	t.Run("有効なFetcherの場合はBuilderとScrapeRunnerを構築する", func(t *testing.T) {
 		fetcher := &mockFetcher{
-			fetchFunc: func(_ context.Context, _ string) ([]byte, error) {
-				return []byte("<html><body><main><p>Body text long enough to extract.</p></main></body></html>"), nil
+			fetchFunc: func(_ context.Context, _ string) ([]byte, string, error) {
+				return []byte("<html><body><main><p>Body text long enough to extract.</p></main></body></html>"), "text/html", nil
 			},
 		}
 
@@ -50,8 +50,8 @@ func TestNew(t *testing.T) {
 
 	t.Run("scraper.Optionが正しく反映される", func(t *testing.T) {
 		fetcher := &mockFetcher{
-			fetchFunc: func(_ context.Context, _ string) ([]byte, error) {
-				return nil, errors.New("呼ばれないはずなのだ")
+			fetchFunc: func(_ context.Context, _ string) ([]byte, string, error) {
+				return nil, "", errors.New("呼ばれないはずなのだ")
 			},
 		}
 
@@ -67,8 +67,8 @@ func TestNew(t *testing.T) {
 
 	t.Run("ScrapeRunnerはrunner.ScrapeRunnerとして構築される", func(t *testing.T) {
 		fetcher := &mockFetcher{
-			fetchFunc: func(_ context.Context, _ string) ([]byte, error) {
-				return []byte("<html><body><main><p>Body text long enough to extract.</p></main></body></html>"), nil
+			fetchFunc: func(_ context.Context, _ string) ([]byte, string, error) {
+				return []byte("<html><body><main><p>Body text long enough to extract.</p></main></body></html>"), "text/html", nil
 			},
 		}
 
